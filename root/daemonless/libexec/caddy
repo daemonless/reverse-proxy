@@ -1,0 +1,6 @@
+#!/bin/sh
+# Caddy runs as root to bind 80/443. It starts with a bootstrap config that
+# has only the admin socket; the admin unit loads the real config.
+export XDG_DATA_HOME=/data
+export XDG_CONFIG_HOME=/data
+exec /usr/local/bin/caddy run --config /etc/reverse-proxy/bootstrap.json

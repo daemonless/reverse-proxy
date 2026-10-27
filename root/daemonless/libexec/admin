@@ -1,0 +1,9 @@
+#!/bin/sh
+# The admin: UI, API, config renderer. Runs as bsd (PUID/PGID) and drives
+# Caddy over the unix sockets in /var/run/reverse-proxy.
+export HOME=/config
+exec dsu bsd /usr/local/bin/reverse-proxy \
+	-state /config \
+	-caddy-socket /var/run/reverse-proxy/caddy.sock \
+	-listen /var/run/reverse-proxy/admin.sock \
+	-probe-socket /var/run/reverse-proxy/tls.sock

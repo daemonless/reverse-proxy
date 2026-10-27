@@ -1,0 +1,21 @@
+#!/bin/sh
+# Runs once before the units, after 10-usermod.
+[ "$(id -u)" = 0 ] || exit 0
+
+# Socket directory: root-owned, group bsd. FreeBSD gives new files the
+# directory's group, so Caddy's root-created socket ends up root:bsd 0660
+# and the bsd admin can open it. Nothing else runs here, so a socket left
+# from an unclean stop is stale and goes.
+rm -rf /var/run/reverse-proxy
+mkdir -p /var/run/reverse-proxy
+chown root:bsd /var/run/reverse-proxy
+chmod 0770 /var/run/reverse-proxy
+
+mkdir -p /config/secrets
+chown bsd:bsd /config/secrets
+chmod 0700 /config/secrets
+
+# Caddy (root) owns /data: certificates, ACME account, CA intermediate.
+mkdir -p /data
+chown root:wheel /data
+chmod 0700 /data

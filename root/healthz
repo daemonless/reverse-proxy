@@ -1,0 +1,5 @@
+#!/bin/sh
+# Daemonless standard healthcheck for reverse-proxy: the admin answers on its
+# socket, and answers 503 while Caddy is not running.
+printf 'GET /healthz HTTP/1.0\r\nHost: admin\r\n\r\n' |
+	nc -U -w 5 /var/run/reverse-proxy/admin.sock 2>/dev/null | head -1 | grep -q ' 200 '

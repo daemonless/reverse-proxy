@@ -1,0 +1,22 @@
+# dbuild configuration file
+# Full reference: https://github.com/daemonless/dbuild
+
+build:
+  architectures:
+    - amd64
+    - aarch64
+  variants:
+    - tag: latest
+      containerfile: Containerfile
+      default: true
+      tag_desc: "**daemonless Appliance**. Managed Caddy reverse proxy with a web UI, built from source."
+
+cit:
+  mode: health
+  port: 8443
+  https: true
+  health: /healthz
+  # The admin logs this once the full Caddy config is live.
+  ready: "\\[admin\\] Caddy configuration loaded"
+  # Caddy runs as root by design (binds 80/443); the admin runs as bsd.
+  puid: false

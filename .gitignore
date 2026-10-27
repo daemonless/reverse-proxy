@@ -1,0 +1,5 @@
+sbom-results
+admin/reverse-proxy
+admin/ui/node_modules/
+admin/ui/dist/*
+!admin/ui/dist/.gitkeep

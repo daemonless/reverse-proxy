@@ -1,0 +1,22 @@
+{
+  "admin": {
+    "listen": "unix//var/run/reverse-proxy/caddy.sock|0660",
+    "origins": [
+      "caddy"
+    ],
+    "config": {
+      "persist": false
+    }
+  },
+  "logging": {
+    "logs": {
+      "default": {
+        "level": "WARN",
+        "exclude": [
+          "admin",
+          "admin.api"
+        ]
+      }
+    }
+  }
+}

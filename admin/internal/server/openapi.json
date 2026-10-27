@@ -1,0 +1,989 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Daemonless Reverse Proxy API",
+    "version": "1",
+    "summary": "Give services on a home network HTTPS names.",
+    "description": "The hosts API of the daemonless reverse proxy. A host is one name (radarr.apps.lan) in front of one service (an address and a port). The proxy issues the certificate and decides who may open the name.\n\nCalls are made to the admin, https://<proxy>:8443, with `Authorization: Bearer <key>`. A key is made in Settings > Connected apps, or given to the proxy at install as `RP_PAIRING_KEY`. A key manages hosts only; the proxy's own settings, certificates, backup and keys belong to the account and answer 403 to a key.\n\nThis is version 1 of the API. Fields may be added; nothing listed here is renamed or removed within version 1. `GET /api/v1/status` says which version a proxy speaks.\n\nInside the container the same calls work over the admin's unix socket without a key, which is what the `reverse-proxy hosts` command uses.",
+    "license": {
+      "name": "BSD-2-Clause",
+      "identifier": "BSD-2-Clause"
+    }
+  },
+  "servers": [
+    {
+      "url": "https://{proxy}:8443",
+      "variables": {
+        "proxy": {
+          "default": "192.168.1.5",
+          "description": "Where the admin is reached: the host's address or proxy.<your ending>."
+        }
+      }
+    }
+  ],
+  "security": [
+    {
+      "key": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "status",
+      "description": "What this proxy is and whether it is set up."
+    },
+    {
+      "name": "hosts",
+      "description": "Names in front of services."
+    },
+    {
+      "name": "trust",
+      "description": "What a device needs to trust a private ending's certificates. Public: no key."
+    }
+  ],
+  "paths": {
+    "/api/v1/status": {
+      "get": {
+        "tags": [
+          "status"
+        ],
+        "summary": "Identify the proxy",
+        "description": "Without a key: product, API version, software version, whether setup is done. With a valid key the ending and the counts come too. A key that is refused gets 401, so an app learns it was disconnected.",
+        "security": [
+          {},
+          {
+            "key": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The proxy's status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Status"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/api/v1/hosts": {
+      "get": {
+        "tags": [
+          "hosts"
+        ],
+        "summary": "List hosts",
+        "description": "The live hosts. With `include=removed` the ones removed in the last 24 hours come too; they carry `deletedAt` and can be restored.",
+        "parameters": [
+          {
+            "name": "include",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "removed"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The hosts.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "hosts"
+                  ],
+                  "properties": {
+                    "hosts": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Host"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "hosts"
+        ],
+        "summary": "Add a host",
+        "description": "Makes `<name>.<ending>` and starts serving it. The name must be free; the target is not checked (use the probe first if you want to be sure). With a `ref` that another host already carries, nothing is made and that host comes back with 409.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HostInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The new host.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Host"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadField"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "409": {
+            "description": "A host with this `ref` exists already (the body is that host), or the proxy refused the new configuration and kept the old one (`error`, `detail`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/Host"
+                    },
+                    {
+                      "$ref": "#/components/schemas/Error"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/hosts/health": {
+      "get": {
+        "tags": [
+          "hosts"
+        ],
+        "summary": "Reach every host's target",
+        "description": "Connects to each live host's target from inside the proxy, as the proxy itself would. Takes up to three seconds per unreachable target, in parallel.",
+        "responses": {
+          "200": {
+            "description": "One result per host id.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "health"
+                  ],
+                  "properties": {
+                    "health": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "$ref": "#/components/schemas/Probe"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/api/v1/hosts/{id}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/id"
+        }
+      ],
+      "get": {
+        "tags": [
+          "hosts"
+        ],
+        "summary": "Get a host",
+        "responses": {
+          "200": {
+            "description": "The host.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Host"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "hosts"
+        ],
+        "summary": "Change a host",
+        "description": "Replaces the host's name, target and access with the body; fields left out are reset to their defaults, so send the whole host.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HostInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The changed host.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Host"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadField"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/NotApplied"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "hosts"
+        ],
+        "summary": "Remove a host",
+        "description": "The name stops being served at once. The host is kept for 24 hours and can be restored.",
+        "responses": {
+          "200": {
+            "description": "Removed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "undoUntil"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "undoUntil": {
+                      "type": "string",
+                      "format": "date-time",
+                      "description": "Until when the host can be restored."
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/api/v1/hosts/{id}/restore": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/id"
+        }
+      ],
+      "post": {
+        "tags": [
+          "hosts"
+        ],
+        "summary": "Restore a removed host",
+        "description": "Undoes a removal made in the last 24 hours.",
+        "responses": {
+          "200": {
+            "description": "The host, live again.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Host"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "description": "Nothing to restore.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/probe": {
+      "get": {
+        "tags": [
+          "hosts"
+        ],
+        "summary": "Try a target",
+        "description": "Connects to an address and port from inside the proxy and says what is there, so a host can be added with the right `https` and `acceptUntrusted`.",
+        "parameters": [
+          {
+            "name": "address",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "192.168.1.20"
+          },
+          {
+            "name": "port",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "example": 7878
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "What answered. `reachable: false` when nothing did.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Probe"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/api/v1/trust": {
+      "get": {
+        "tags": [
+          "trust"
+        ],
+        "summary": "What to trust",
+        "description": "Public. With a private ending the proxy is its own certificate authority; this is its root's fingerprint and where to download it. With public certificates `needed` is false.",
+        "security": [
+          {}
+        ],
+        "responses": {
+          "200": {
+            "description": "Trust information.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Trust"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/pair": {
+      "post": {
+        "tags": [
+          "trust"
+        ],
+        "summary": "Redeem a pairing code for a key",
+        "description": "Public, rate-limited. An app elsewhere (a fjord) sends a code the admin made under Connected apps (\"Connect a fjord…\", good for ten minutes, once) with its own id, name and address, and gets a key of its own plus what it needs to trust this proxy.",
+        "security": [
+          {}
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "code"
+                ],
+                "properties": {
+                  "code": {
+                    "type": "string",
+                    "example": "HXFY-4V5Y-4ZRV-UV43"
+                  },
+                  "client": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "description": "The app's permanent id (letters, digits, dashes)."
+                      },
+                      "name": {
+                        "type": "string",
+                        "description": "Shown in Connected apps, e.g. \"fjord on venus\"."
+                      },
+                      "url": {
+                        "type": "string",
+                        "description": "Where the app is opened; shown as a way back."
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The key and trust information.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "key": {
+                      "type": "string"
+                    },
+                    "domain": {
+                      "type": "string"
+                    },
+                    "proxyName": {
+                      "type": "string"
+                    },
+                    "needed": {
+                      "type": "boolean"
+                    },
+                    "fingerprint": {
+                      "type": "string"
+                    },
+                    "rootUrl": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The code is wrong or expired."
+          },
+          "429": {
+            "description": "Too many wrong codes; retry later."
+          }
+        }
+      }
+    },
+    "/trust/root.crt": {
+      "get": {
+        "tags": [
+          "trust"
+        ],
+        "summary": "The root certificate (PEM)",
+        "description": "Public. Also served on the plain-HTTP trust listener, http://<proxy>/trust/root.crt, for devices that do not trust the proxy yet.",
+        "security": [
+          {}
+        ],
+        "responses": {
+          "200": {
+            "description": "The root certificate.",
+            "content": {
+              "application/x-pem-file": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No private ending, so no root."
+          }
+        }
+      }
+    },
+    "/api/v1/me": {
+      "put": {
+        "tags": [
+          "trust"
+        ],
+        "summary": "Say who the app behind this key is",
+        "description": "The app's permanent id, the name shown under Connected apps (for example: fjord on venus) and where it is opened. Only what is sent changes. For an app's key; the account gets 403.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "description": "Letters, digits, dashes; up to 64."
+                  },
+                  "name": {
+                    "type": "string",
+                    "description": "One line, up to 64 characters."
+                  },
+                  "url": {
+                    "type": "string",
+                    "description": "http(s) address of the app."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Recorded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "changed": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not an app's key."
+          }
+        }
+      }
+    },
+    "/api/v1/openapi.json": {
+      "get": {
+        "tags": [
+          "status"
+        ],
+        "summary": "This document",
+        "security": [
+          {}
+        ],
+        "responses": {
+          "200": {
+            "description": "This document.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "key": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "A connected app's key: `rp_<id>_<secret>` from Settings > Connected apps, or the `RP_PAIRING_KEY` the proxy was installed with, sent whole."
+      }
+    },
+    "parameters": {
+      "id": {
+        "name": "id",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string"
+        },
+        "description": "The host's id from the list."
+      }
+    },
+    "responses": {
+      "Unauthorized": {
+        "description": "No key, or one the proxy no longer accepts.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "NotFound": {
+        "description": "No such host.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "BadField": {
+        "description": "A field the caller must fix; `field` names it (`name` when the name is taken or not a label; `target.address`, `target.port`, `access`, `extraNames`, `trustedNetworks`). An empty `field` means the proxy has no ending yet: finish its setup first.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "NotApplied": {
+        "description": "The proxy refused the new configuration and kept the old one; `detail` has its reason.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      }
+    },
+    "schemas": {
+      "Error": {
+        "type": "object",
+        "required": [
+          "error"
+        ],
+        "properties": {
+          "error": {
+            "type": "string",
+            "description": "What went wrong, in plain words."
+          },
+          "field": {
+            "type": "string",
+            "description": "The request field to fix, when there is one."
+          },
+          "detail": {
+            "type": "string",
+            "description": "The proxy's own words, when the configuration was refused."
+          }
+        }
+      },
+      "Status": {
+        "type": "object",
+        "required": [
+          "product",
+          "apiVersion",
+          "version",
+          "caddy",
+          "setup"
+        ],
+        "properties": {
+          "product": {
+            "type": "string",
+            "const": "reverse-proxy"
+          },
+          "apiVersion": {
+            "type": "integer",
+            "const": 1
+          },
+          "version": {
+            "type": "string",
+            "description": "The admin's version.",
+            "example": "0.1.0"
+          },
+          "caddy": {
+            "type": "object",
+            "properties": {
+              "running": {
+                "type": "boolean"
+              },
+              "version": {
+                "type": "string"
+              }
+            }
+          },
+          "setup": {
+            "type": "object",
+            "properties": {
+              "complete": {
+                "type": "boolean",
+                "description": "False until the first run (password and ending) is done; until then hosts cannot be served."
+              }
+            }
+          },
+          "domain": {
+            "type": "string",
+            "description": "With a key: the ending, e.g. `apps.lan`. Empty before setup.",
+            "example": "apps.lan"
+          },
+          "adminUrl": {
+            "type": "string",
+            "description": "With a key: where a person opens the proxy's own pages (`RP_ADMIN_URL`, else the address the account last signed in at). Absent until someone has.",
+            "example": "https://192.168.1.5:8443"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "unset",
+              "private",
+              "public"
+            ],
+            "description": "With a key: `private` endings get the proxy's own certificates, `public` ones Let's Encrypt."
+          },
+          "hosts": {
+            "type": "integer",
+            "description": "With a key: how many live hosts."
+          },
+          "certificates": {
+            "type": "string",
+            "description": "With a key: the certificate state (`ok`, `issuing`, `trial`, `failed`, `manual`)."
+          },
+          "proxyName": {
+            "type": "string",
+            "description": "With a key: the proxy's own name, `proxy.<ending>`.",
+            "example": "proxy.apps.lan"
+          },
+          "trustUrl": {
+            "type": "string",
+            "description": "With a key: the trust page by name.",
+            "example": "http://proxy.apps.lan/trust"
+          }
+        }
+      },
+      "Target": {
+        "type": "object",
+        "required": [
+          "address",
+          "port"
+        ],
+        "properties": {
+          "address": {
+            "type": "string",
+            "description": "IP address or hostname the proxy connects to.",
+            "example": "192.168.1.20"
+          },
+          "port": {
+            "type": "integer",
+            "example": 7878
+          },
+          "https": {
+            "type": "boolean",
+            "default": false,
+            "description": "The service itself speaks HTTPS."
+          },
+          "acceptUntrusted": {
+            "type": "boolean",
+            "default": false,
+            "description": "With `https`: accept the service's self-signed certificate."
+          }
+        }
+      },
+      "HostInput": {
+        "type": "object",
+        "required": [
+          "name",
+          "target"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "The label under the ending: letters, digits and dashes.",
+            "example": "radarr"
+          },
+          "extraNames": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "More labels for the same service."
+          },
+          "target": {
+            "$ref": "#/components/schemas/Target"
+          },
+          "access": {
+            "type": "string",
+            "enum": [
+              "home",
+              "internet"
+            ],
+            "default": "home",
+            "description": "`home`: devices on the home network only. `internet`: anyone."
+          },
+          "trustedNetworks": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Extra networks (CIDR) that count as home for this host only."
+          },
+          "ref": {
+            "type": "string",
+            "description": "Opaque mark of where the host came from, e.g. `fjord:<host>:<stack>`, so a manager finds its hosts again. One host per ref.",
+            "example": "fjord:server:radarr"
+          },
+          "ownOrigin": {
+            "type": "boolean",
+            "default": false,
+            "description": "The service checks Origin and Referer against its own address (UniFi does): requests from this name's own pages reach it with its address in those headers. Off by default, since most services compare Origin with the Host they are given. Left as it was when a PUT omits it."
+          }
+        }
+      },
+      "Host": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/HostInput"
+          },
+          {
+            "type": "object",
+            "required": [
+              "id",
+              "names",
+              "url",
+              "createdAt"
+            ],
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "names": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "The full names served, first the main one.",
+                "example": [
+                  "radarr.apps.lan"
+                ]
+              },
+              "url": {
+                "type": "string",
+                "description": "Where to open it.",
+                "example": "https://radarr.apps.lan"
+              },
+              "createdAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "deletedAt": {
+                "type": "string",
+                "format": "date-time",
+                "description": "Set on a removed host while it can still be restored."
+              }
+            }
+          }
+        ]
+      },
+      "Probe": {
+        "type": "object",
+        "required": [
+          "reachable",
+          "https",
+          "untrustedCert"
+        ],
+        "properties": {
+          "reachable": {
+            "type": "boolean"
+          },
+          "https": {
+            "type": "boolean",
+            "description": "The target speaks HTTPS."
+          },
+          "untrustedCert": {
+            "type": "boolean",
+            "description": "Its certificate is not trusted (self-signed)."
+          },
+          "self": {
+            "type": "boolean",
+            "description": "The address is this proxy's own port 80 or 443, so a name for it would loop."
+          },
+          "status": {
+            "type": "integer",
+            "description": "HTTP status of a GET /."
+          },
+          "server": {
+            "type": "string",
+            "description": "Its Server header, when it sends one."
+          }
+        }
+      },
+      "Trust": {
+        "type": "object",
+        "required": [
+          "domain",
+          "mode",
+          "needed",
+          "httpPort"
+        ],
+        "properties": {
+          "domain": {
+            "type": "string"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "unset",
+              "private",
+              "public"
+            ]
+          },
+          "needed": {
+            "type": "boolean",
+            "description": "False once public certificates are set up: nothing to trust by hand."
+          },
+          "httpPort": {
+            "type": "integer",
+            "description": "The host port of the plain-HTTP trust listener."
+          },
+          "proxyName": {
+            "type": "string",
+            "example": "proxy.apps.lan"
+          },
+          "fingerprint": {
+            "type": "string",
+            "description": "SHA-256 of the root certificate, to check against what a device shows."
+          },
+          "rootUrl": {
+            "type": "string",
+            "const": "/trust/root.crt"
+          },
+          "notAfter": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the root expires."
+          }
+        }
+      }
+    }
+  }
+}
