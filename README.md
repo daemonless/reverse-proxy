@@ -9,7 +9,29 @@ Source: dbuild templates
 [![Last Commit](https://img.shields.io/github/last-commit/daemonless/reverse-proxy?style=flat-square&label=Last+Commit&color=blue)](https://github.com/daemonless/reverse-proxy/commits)
 [![OCI Pulls](https://img.shields.io/docker/pulls/daemonless/reverse-proxy?style=flat-square&label=OCI+Pulls&color=blue)](https://hub.docker.com/r/daemonless/reverse-proxy)
 
-Friendly HTTPS names for the services on your network: a managed Caddy reverse proxy with a web UI, secure by default.
+Give every app on your network a real name with HTTPS: radarr.home.lan instead of 192.168.1.20:7878. Set up in a browser, no config files.
+
+![Adding a name and opening it over HTTPS](https://raw.githubusercontent.com/daemonless/reverse-proxy/main/.daemonless/demo/demo-light.gif)
+
+Your apps live at addresses like `192.168.1.20:7878`, and every browser
+warns that they are "not secure". The reverse proxy gives each one a
+name, `radarr.home.lan` or `radarr.example.com`, with a padlock. You
+set it up from a web page, step by step, and add a name by pasting the
+address you use today. It is [Caddy](https://caddyserver.com) underneath, managed for you.
+
+**What it does**
+
+- **A name and a padlock for every app.** Paste where an app is; the proxy finds out whether it speaks HTTP or HTTPS and checks that it answers. Each name shows whether its app is up.
+- **Three kinds of names, your choice.** *Just for home* (`radarr.home.lan`): free, works without the internet; the proxy is its own certificate authority, limited to your ending, and walks each phone and computer through trusting it once, with a QR code. *A free name* (`radarr.you.duckdns.org`) or *your own domain* (`radarr.example.com`): real certificates from Let's Encrypt, one wildcard for every name, renewed by itself; nothing to install on any device. It picks your DNS provider from the domain (Cloudflare, Route 53, DuckDNS, deSEC, Porkbun, Hetzner, OVH, Gandi, RFC 2136, acme-dns) and tries the token on Let's Encrypt's test service first.
+- **Home only, unless you say so.** Every name opens only for devices on your home network. Open one to the internet when you want to; outsiders asking for any other name get nothing back, not even a "not found". On a host with several networks, you pick which are home: the proxy still reaches apps on the others.
+- **Short links.** Type `go/radarr` in any browser on your network. `go/` alone lists every name.
+- **Walks you through your router.** Setup says exactly which record to add, with steps for OPNsense, pfSense, UniFi, Pi-hole, AdGuard Home and others, and turns green when it works.
+- **Says what is wrong, in plain words.** A certificate that fails says why (token rejected, record never appeared, rate limit) and how to fix it. A name nobody set up shows a page saying so, at home.
+- **Works with [fjord](https://github.com/daemonless/fjord).** Installed from fjord, it pairs by itself: fjord lists your apps that have no name yet, names them in one click, and keeps each name pointing at its app when the app moves to a new address.
+- **Scriptable.** A key per app or script manages names and nothing else; there is an OpenAPI reference and a command line inside the container.
+- **Easy to keep.** One encrypted backup file holds everything; restore it on a fresh install. Delete a name by mistake and Undo brings it back.
+
+Native FreeBSD (amd64 and arm64), built from source. The web UI runs unprivileged; only Caddy is root, to bind ports 80 and 443.
 
 | | |
 |---|---|
@@ -177,65 +199,84 @@ Open `http://<server>:80` from another machine (the server's own browser can't u
 | `443` | TCP | HTTPS: your hosts |
 | `8443` | TCP | Admin UI (HTTPS) |
 
-![Adding a name and opening it over HTTPS](https://raw.githubusercontent.com/daemonless/reverse-proxy/main/.daemonless/demo.gif)
-
 ### First run
 
 Start the container and read its log: it prints a link like
 `https://<this machine>:8443/#token=XXXX-XXXX-XXXX-XXXX`. Open it from
 another device on your network (the host itself cannot reach its own
-published ports) and follow the steps: password, the ending for your
-service names (for example `apps.lan`), one DNS record, and trusting the
-proxy on your devices. From then on the proxy remembers the address you
-sign in at, so `reverse-proxy reset-password` and a later first run
+published ports). Setup asks for a password, which networks are home
+(only when the proxy is on more than one), how your names should look,
+one record on your router, and then helps each device trust the proxy.
+Installed from fjord, fjord opens this link for you.
+
+The admin uses a self-issued certificate until setup is done, so the
+browser warns once. After setup it lives at `https://proxy.<your ending>`
+with a certificate your devices trust. The proxy remembers the address
+you sign in at, so `reverse-proxy reset-password` and a later first run
 print it; `RP_ADMIN_URL` makes the very first link exact too.
 
-The admin UI uses a self-issued certificate until setup is done, so the
-browser warns once. After setup it is also served at
-`https://proxy.<your ending>:8443` with a certificate your devices trust.
+### Names
 
-### How it works
+**Just for home** (`apps.lan`, `home.arpa`, …): the proxy makes its own
+root certificate, restricted to that ending, so it can never vouch for
+any other site. The Trust page has steps for iPhone and iPad, Android,
+Mac, Windows, Linux and FreeBSD, with a QR code for phones. Visitors'
+devices see a warning until they trust it too.
 
-One container, two programs: Caddy runs as root so it can bind ports 80
-and 443, and the admin runs as `bsd` (`PUID`/`PGID`). They talk over
-unix sockets inside the container, so the stack works on any network.
-Every host you add becomes a name under your ending, served over HTTPS
-and proxied to the address and port you gave. Hosts are "home network
-only" unless you open one to the internet. With a private ending
-(`.lan`, `.home.arpa`, …) the proxy is its own certificate authority,
-restricted to that ending; the Trust page walks each kind of device
-through trusting it once, with a QR code for phones.
+**A free name**: pick "A free name from DuckDNS" in setup, sign in at
+duckdns.org, add a name, paste its token. Every app gets a name like
+`radarr.you.duckdns.org` that every device already trusts.
 
-With a real domain (`home.example.com`) the wizard asks where its DNS
-is hosted (Cloudflare, Route 53, DuckDNS, deSEC, Porkbun, Hetzner, OVH,
-Gandi, any RFC 2136 server or acme-dns; the right one is picked from the
-domain's nameservers) and for a token that can edit its records. The
-proxy then gets one wildcard certificate for every name under the
-domain from Let's Encrypt and renews it by itself, so no device needs
-any setup. The token is tried against the staging service first, so a
-wrong one never counts against Let's Encrypt's limits. Nothing is
-reachable from the internet unless a host is opened to it.
+**Your own domain** (`home.example.com`): setup finds where its DNS is
+hosted and asks for a token that can edit its records. The proxy gets
+one wildcard certificate from Let's Encrypt for every name under it, so
+names never appear in the public certificate logs one by one. Nothing is
+reachable from the internet unless you open a name to it.
 
-No domain? Pick "A free name from DuckDNS" in the wizard: sign in at
-duckdns.org, add a name, paste its token, and every service gets a name
-like `radarr.you.duckdns.org` with a certificate every device already
-trusts.
+Per name, for apps that need it: more than one name for the same app;
+an app that serves HTTPS itself (its own certificate can be accepted);
+and "the service expects its own address", for apps such as UniFi that
+refuse a sign-in coming from another name.
+
+### Who can open what
+
+A name is **home network only** unless you open it to the internet.
+Home is your private network (`10.x`, `172.16–31.x`, `192.168.x`), plus
+anything you add under Settings → Home network, such as a VPN
+(`100.64.0.0/10` for Tailscale).
+
+When the container is on several networks (fjord can give it one per
+VLAN so it reaches every app), setup and Settings → Home network list
+them. Devices on a ticked network can open the proxy and its home-only
+names. On an unticked one the proxy does not even answer, and its devices
+are never home, whatever your router does; the proxy still reaches the
+apps there. The network your browser is on stays ticked, so you cannot
+lock yourself out. From the command line:
+`reverse-proxy listen 192.168.1.0/24` (or `listen all`); `RP_LISTEN`
+sets it in the compose.
 
 ### Short links
 
-Go links: type `go/radarr` in a browser to open `radarr.<your ending>`.
-Any of your names works, with its path, and `go/` alone
-lists them. It takes one more record on your router (`go` pointing at
-the proxy); setup and Settings → Short links walk you through it and
-turn green once it works. The word is yours to change, or turn off. The
-first time, type `http://go/radarr` with the `http://`: Safari and
+Type `go/radarr` in a browser to open `radarr.<your ending>`, with any
+path after it; `go/` alone lists every name. It takes one more record
+on your router (`go` pointing at the proxy); setup and Settings → Short
+links walk you through it. The word is yours to change, or turn off.
+The first time, type `http://go/radarr` with the `http://`: Safari and
 Firefox otherwise search the web for it.
+
+### fjord
+
+Install the proxy from [fjord](https://github.com/daemonless/fjord) and
+the two pair by themselves: fjord passes a key and a setup link, and its
+Finish setup button opens setup already verified. After that, fjord
+lists the apps that have no name yet and names the ones you pick, and
+keeps each name pointing at its app when the app's address changes.
 
 ### Scripts and other apps
 
-Anything that can make an HTTPS request can manage hosts. Make a key
+Anything that can make an HTTPS request can manage names. Make a key
 under Settings → Connected apps (or hand one to the proxy at install as
-`RP_PAIRING_KEY`) and send it as a bearer token; a key manages hosts and
+`RP_PAIRING_KEY`) and send it as a bearer token; a key manages names and
 nothing else. The reference is the proxy's own
 `https://<proxy>:8443/api/v1/openapi.json`.
 
@@ -255,11 +296,19 @@ podman exec reverse-proxy reverse-proxy hosts remove radarr
 
 ### Operations
 
-- **Forgot the password:** run `podman exec reverse-proxy reverse-proxy reset-password` to print a new setup link.
-- **Backup:** Settings → Backup downloads one passphrase-encrypted file (hosts, settings, password, root certificate). Restore it from the welcome screen of a fresh install.
-- **Keep `/data`:** it holds the certificates Caddy issued. Losing `/config` loses the root certificate (and the DNS token), and every device would have to trust the proxy again; a backup avoids that.
-- **Certificate trouble:** the Hosts page shows a banner while a certificate is being obtained or when it failed, with the reason in plain words (token rejected, token cannot edit the zone, record did not appear, rate limit). Change the token under Settings → Secure connection.
+- **Forgot the password:** `podman exec reverse-proxy reverse-proxy reset-password` prints a new setup link.
+- **Backup:** Settings → Backup downloads one passphrase-encrypted file (names, settings, password, root certificate, DNS token). Restore it from the welcome screen of a fresh install.
+- **Keep `/data`:** it holds the certificates Caddy issued. Losing `/config` loses the root certificate and the DNS token, and every device would have to trust the proxy again; a backup avoids that.
+- **Certificate trouble:** the Names page shows a banner while a certificate is being obtained or when it failed, with the reason in plain words. Change the token under Settings → Ending and certificates.
 - **Non-default HTTP port:** if you publish the trust page on something other than 80, set `RP_TRUST_PORT` so the Trust page's commands and QR code use it.
+
+### How it works
+
+One container, two programs. Caddy runs as root so it can bind ports 80
+and 443; the admin (the web UI and API) runs as `bsd` (`PUID`/`PGID`).
+They talk over unix sockets inside the container. The admin keeps one
+state file and writes Caddy's whole configuration from it: nothing is
+hand-edited, and a change Caddy refuses leaves the running one in place.
 
 
 **Architectures:** amd64, aarch64

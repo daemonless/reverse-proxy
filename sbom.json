@@ -1,11 +1,11 @@
 {
-  "generated": "2026-10-28T08:35:56Z",
+  "generated": "2026-10-28T21:01:03Z",
   "image": "reverse-proxy",
   "tags": {
     "latest-amd64": {
-      "app_version": "0.1.0",
+      "app_version": "0.2.0",
       "arch": "amd64",
-      "generated": "2026-10-28T08:35:18Z",
+      "generated": "2026-10-28T21:00:26Z",
       "packages": {
         "dotnet": [],
         "freebsd": [
@@ -245,7 +245,7 @@
               "MPL20"
             ],
             "name": "ca_root_nss",
-            "version": "3.131.1"
+            "version": "3.132"
           },
           {
             "licenses": [
