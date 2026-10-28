@@ -205,6 +205,10 @@
                   "handler": "headers",
                   "response": {
                     "deferred": true,
+                    "delete": [
+                      "Server",
+                      "Via"
+                    ],
                     "set": {
                       "Referrer-Policy": [
                         "strict-origin-when-cross-origin"
@@ -254,6 +258,10 @@
                   "handler": "headers",
                   "response": {
                     "deferred": true,
+                    "delete": [
+                      "Server",
+                      "Via"
+                    ],
                     "set": {
                       "Referrer-Policy": [
                         "strict-origin-when-cross-origin"

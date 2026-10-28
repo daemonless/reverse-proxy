@@ -514,7 +514,8 @@ const hstsOff = "max-age=0"
 
 // securityHeaders are added to every proxied response. Only headers that
 // never break an application: no frame or content-security policy, which
-// the applications themselves own.
+// the applications themselves own. Server and Via go: they name the proxy
+// and the app's server software to anyone who asks.
 func securityHeaders(pin bool) map[string]any {
 	hsts := hstsOff
 	if pin {
@@ -528,6 +529,7 @@ func securityHeaders(pin bool) map[string]any {
 				"X-Content-Type-Options":    []string{"nosniff"},
 				"Referrer-Policy":           []string{"strict-origin-when-cross-origin"},
 			},
+			"delete":   []string{"Server", "Via"},
 			"deferred": true,
 		},
 	}
