@@ -142,7 +142,7 @@ func TestOpenAPIMatchesRoutes(t *testing.T) {
 				body = `{"name":"doc","target":{"address":"1.2.3.4","port":80},"access":"home"}`
 			}
 			rr, _ := api.do(strings.ToUpper(method), p, body)
-			if rr.Code == http.StatusNotFound && !strings.Contains(path, "restore") && !strings.Contains(path, "root.crt") || rr.Code == http.StatusMethodNotAllowed {
+			if rr.Code == http.StatusNotFound && !strings.Contains(path, "restore") && !strings.Contains(path, "root.crt") && !strings.HasSuffix(path, "/icon") || rr.Code == http.StatusMethodNotAllowed {
 				t.Errorf("%s %s is in openapi.json but answers %d", method, path, rr.Code)
 			}
 		}

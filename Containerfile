@@ -57,7 +57,7 @@ RUN h="$(/src/ui/source-hash)" && \
 FROM ui-${FREEBSD_ARCH} AS ui-build
 
 FROM ghcr.io/daemonless/base:${BASE_VERSION} AS admin-build
-ARG APP_VER=0.1.0
+ARG APP_VER=0.2.0
 RUN pkg update && pkg install -y go && pkg clean -ay && rm -rf /var/cache/pkg/* /var/db/pkg/repos/*
 COPY admin/ /src/
 COPY --from=ui-build /src/ui/dist/ /src/ui/dist/
@@ -66,7 +66,7 @@ RUN cd /src && CGO_ENABLED=0 go build -trimpath \
       -o /out/reverse-proxy ./cmd/reverse-proxy
 
 FROM ghcr.io/daemonless/base-rcd:${BASE_VERSION}
-ARG APP_VER=0.1.0
+ARG APP_VER=0.2.0
 ARG FREEBSD_ARCH=amd64
 ARG PACKAGES="ca_root_nss"
 

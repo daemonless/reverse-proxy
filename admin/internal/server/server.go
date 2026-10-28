@@ -24,6 +24,7 @@ import (
 	"github.com/daemonless/reverse-proxy/admin/internal/caddy"
 	"github.com/daemonless/reverse-proxy/admin/internal/certs"
 	"github.com/daemonless/reverse-proxy/admin/internal/dns"
+	"github.com/daemonless/reverse-proxy/admin/internal/netif"
 	"github.com/daemonless/reverse-proxy/admin/internal/state"
 )
 
@@ -60,6 +61,10 @@ type Server struct {
 	// DNSRefused is Caddy's error when it refused the saved credentials at
 	// startup and the proxy runs without them; "" (or nil) otherwise.
 	DNSRefused func() string
+	// Networks lists the container's networks (netif.List when nil);
+	// ListenEnv is RP_LISTEN, which overrides the saved choice.
+	Networks  func() []netif.Network
+	ListenEnv string
 
 	mu       sync.Mutex
 	tokenBad *dns.Problem         // the last daily token check, when it failed
@@ -100,6 +105,7 @@ func New(version string, caddy Runner, mgr *app.Manager, setupToken, secrets str
 	s.mux.Handle("GET /", uiHandler())
 	// Socket-only: the reset-password command.
 	s.mux.HandleFunc("POST /internal/reset", s.reset)
+	s.mux.HandleFunc("POST /internal/listen", s.internalListen)
 	s.mux.HandleFunc("GET /api/v1/openapi.json", openAPI)
 	// The hosts API (v1, see openapi.json): the account, the command line
 	// over the socket, or a connected app's key.
@@ -110,10 +116,13 @@ func New(version string, caddy Runner, mgr *app.Manager, setupToken, secrets str
 	s.mux.HandleFunc("PUT /api/v1/hosts/{id}", s.requireAuth(s.updateHost))
 	s.mux.HandleFunc("DELETE /api/v1/hosts/{id}", s.requireAuth(s.deleteHost))
 	s.mux.HandleFunc("POST /api/v1/hosts/{id}/restore", s.requireAuth(s.restoreHost))
+	s.mux.HandleFunc("GET /api/v1/hosts/{id}/icon", s.requireAuth(s.hostIcon))
+	s.mux.HandleFunc("PUT /api/v1/hosts/{id}/icon", s.requireAuth(s.putHostIcon))
 	s.mux.HandleFunc("GET /api/v1/probe", s.requireAuth(s.probe))
 	// The proxy's own settings: the account only (and the command line).
 	s.mux.HandleFunc("GET /api/v1/settings", s.requireAdmin(s.getSettings))
 	s.mux.HandleFunc("PUT /api/v1/settings", s.requireAdmin(s.putSettings))
+	s.mux.HandleFunc("PUT /api/v1/listen", s.requireAdmin(s.putListen))
 	s.mux.HandleFunc("GET /api/v1/dns-check", s.requireAdmin(s.dnsCheck))
 	s.mux.HandleFunc("GET /api/v1/suggest-domain", s.requireAdmin(s.suggestDomain))
 	s.mux.HandleFunc("GET /api/v1/certificates", s.requireAdmin(s.getCertificates))
@@ -129,6 +138,14 @@ func New(version string, caddy Runner, mgr *app.Manager, setupToken, secrets str
 	s.mux.HandleFunc("POST /api/v1/tokens", s.requireAdmin(s.createToken))
 	s.mux.HandleFunc("DELETE /api/v1/tokens/{id}", s.requireAdmin(s.deleteToken))
 	s.mux.HandleFunc("PUT /api/v1/tokens/{id}", s.requireAdmin(s.setTokenDisabled))
+	// A name purged since the last start leaves its icon behind; an icon
+	// lost to a save race before iconMu is sent again once forgotten.
+	iconMu.Lock()
+	s.tidyIcons()
+	if st := s.mgr.State().Clone(); s.fitIcons(st) {
+		mgr.Note(func(next *state.State) { s.fitIcons(next) })
+	}
+	iconMu.Unlock()
 	return s
 }
 

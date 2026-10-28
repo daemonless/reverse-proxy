@@ -62,13 +62,20 @@ export type Host = {
   trustedNetworks?: string[]
   ref?: string
   ownOrigin?: boolean
+  icon?: string // "<hash>.<kind>": the app that made the name sent one
   createdAt: string
   deletedAt?: string
   names: string[]
   url: string
 }
 export type Health = { reachable: boolean; https: boolean; untrustedCert: boolean; status?: number; self?: boolean }
-export type Settings = { domain: string; mode: '' | 'public' | 'private'; trustedNetworks: string[]; shortLinks?: string; localDomain?: string; fallbackUrl?: string }
+export type Network = { interface: string; network: string; address: string }
+export type Settings = {
+  domain: string; mode: '' | 'public' | 'private'; trustedNetworks: string[]; shortLinks?: string; localDomain?: string; fallbackUrl?: string
+  // The container's networks, the one this page came in on, and the ones it
+  // answers on ([] is every network; listenSetBy names RP_LISTEN when that decides).
+  networks?: Network[]; here?: string; listen?: string[]; listenSetBy?: string
+}
 export type Session = { authenticated: boolean; kind: string; setupRequired: boolean }
 export type Status = { version: string; caddy: { running: boolean; version?: string }; setup: { complete: boolean }; domain?: string; mode?: string; hosts?: number; certificates?: string }
 export type Token = { id: string; label: string; createdAt: string; lastUsedAt?: string; paired?: boolean; disabled?: boolean; url?: string; clientId?: string; names?: number }

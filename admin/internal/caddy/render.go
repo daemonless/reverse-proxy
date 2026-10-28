@@ -38,7 +38,16 @@ type Input struct {
 	// IssuanceLog is a file Caddy writes certificate events to, which the
 	// admin reads to report progress and failures. Empty disables it.
 	IssuanceLog string
-	State       *state.State
+	// Listen are the addresses 80, 443 and 8443 answer on when the proxy
+	// answers on one network only; nil is every network. Empty (that
+	// network has no address yet) leaves only loopback: never all of them,
+	// which would undo what the person chose without a word.
+	Listen []string
+	// Shut are the subnets of the container's networks left out of
+	// Listen: their devices are never home, even routed to an address the
+	// proxy still answers on.
+	Shut  []string
+	State *state.State
 }
 
 // Staging is the Let's Encrypt staging directory: real issuance flow,
@@ -193,11 +202,32 @@ func Render(in Input) map[string]any {
 // ProxyName is the proxy's own hostname under the user's domain.
 func ProxyName(s state.Settings) string { return "proxy." + s.Domain }
 
+// listenOn is the listen list for a port: every address, or the chosen
+// network's plus loopback (the in-container healthcheck URL and tools).
+func listenOn(in Input, port string) []string {
+	if in.Listen == nil {
+		return []string{":" + port}
+	}
+	out := []string{"127.0.0.1:" + port}
+	for _, a := range in.Listen {
+		out = append(out, net.JoinHostPort(a, port))
+	}
+	return out
+}
+
+// LocalHeader carries the address a request came in on, so the admin
+// (behind a unix socket) knows which network the person is on. Set by
+// Caddy, overwriting anything the client sent.
+const LocalHeader = "X-Rp-Local-Addr"
+
 // adminUpstream is the admin's unix socket as a reverse_proxy handler.
 func adminUpstream(in Input) map[string]any {
 	return map[string]any{
 		"handler":   "reverse_proxy",
 		"upstreams": []any{map[string]any{"dial": "unix/" + in.UISocket}},
+		"headers": map[string]any{"request": map[string]any{
+			"set": map[string]any{LocalHeader: []string{"{http.request.local.host}"}},
+		}},
 	}
 }
 
@@ -242,7 +272,7 @@ func adminServer(in Input, proxyName string) map[string]any {
 		p.(map[string]any)["protocol_min"] = "tls1.2"
 	}
 	return map[string]any{
-		"listen":          []string{":8443"},
+		"listen":          listenOn(in, "8443"),
 		"automatic_https": map[string]any{"disable": true},
 		"routes": []any{
 			// /internal/ is for the reset-password command over the unix
@@ -298,7 +328,7 @@ func trustServer(in Input, hostNames []string) map[string]any {
 			}},
 		})
 	return map[string]any{
-		"listen":          []string{":80"},
+		"listen":          listenOn(in, "80"),
 		"automatic_https": map[string]any{"disable": true},
 		"protocols":       []string{"h1"}, // plain port: no h2/h3, and no warning about it
 		"routes":          routes,
@@ -379,7 +409,7 @@ func hostsServer(in Input, st *state.State, hosts []state.Host, proxyName string
 	for _, h := range hosts {
 		match := map[string]any{"host": h.Names(st.Settings)}
 		if h.Access == state.AccessHome {
-			match["remote_ip"] = map[string]any{"ranges": homeNetworks(st.Settings, h)}
+			atHome(in, match, homeNetworks(st.Settings, h))
 		}
 		routes = append(routes, map[string]any{
 			"match":    []any{match},
@@ -393,7 +423,7 @@ func hostsServer(in Input, st *state.State, hosts []state.Host, proxyName string
 	// none. Someone at home matches every home-only name anyway.
 	routes = append(routes,
 		map[string]any{
-			"match":    []any{map[string]any{"remote_ip": map[string]any{"ranges": homeNetworks(st.Settings, state.Host{})}}},
+			"match":    []any{atHome(in, map[string]any{}, homeNetworks(st.Settings, state.Host{}))},
 			"handle":   []any{unknownNameResponse(proxyName)},
 			"terminal": true,
 		},
@@ -401,7 +431,7 @@ func hostsServer(in Input, st *state.State, hosts []state.Host, proxyName string
 			"handle": []any{map[string]any{"handler": "static_response", "abort": true}},
 		})
 	return map[string]any{
-		"listen":          []string{":443"},
+		"listen":          listenOn(in, "443"),
 		"automatic_https": map[string]any{"disable": true},
 		// The Host header must name the same site the TLS handshake did, so
 		// one host's certificate cannot be used to reach another's backend.
@@ -501,6 +531,16 @@ func securityHeaders(pin bool) map[string]any {
 			"deferred": true,
 		},
 	}
+}
+
+// atHome adds "from home" to a matcher set: from one of ranges, and not
+// from a network shut out of the proxy.
+func atHome(in Input, match map[string]any, ranges []string) map[string]any {
+	match["remote_ip"] = map[string]any{"ranges": ranges}
+	if len(in.Shut) > 0 {
+		match["not"] = []any{map[string]any{"remote_ip": map[string]any{"ranges": in.Shut}}}
+	}
+	return match
 }
 
 func homeNetworks(s state.Settings, h state.Host) []string {

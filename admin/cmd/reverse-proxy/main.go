@@ -47,9 +47,11 @@ func main() {
 		os.Exit(resetPassword(*listen))
 	case "hosts":
 		os.Exit(hostsCmd(*listen, flag.Args()[1:]))
+	case "listen":
+		os.Exit(listenCmd(*listen, flag.Args()[1:]))
 	case "":
 	default:
-		fmt.Fprintf(os.Stderr, "reverse-proxy: unknown command %q\n\nCommands:\n  hosts           list, add, remove or restore hosts\n  reset-password  forget the password and print a new setup link\n", flag.Arg(0))
+		fmt.Fprintf(os.Stderr, "reverse-proxy: unknown command %q\n\nCommands:\n  hosts           list, add, remove or restore hosts\n  listen          answer on every network, or on some\n  reset-password  forget the password and print a new setup link\n", flag.Arg(0))
 		os.Exit(2)
 	}
 	log.Printf("[admin] reverse-proxy %s", version)
@@ -77,6 +79,8 @@ func main() {
 
 	client := caddy.NewClient(*caddySock)
 	refused := &dns.Refusal{}
+	listenEnv := strings.TrimSpace(os.Getenv("RP_LISTEN"))
+	answering := &answerOn{env: listenEnv}
 	render := func(st *state.State) any {
 		in := caddy.Input{
 			AdminSocket: *caddySock,
@@ -88,6 +92,7 @@ func main() {
 			IssuanceLog: issuanceLog,
 			State:       st,
 		}
+		in.Listen, in.Shut = answering.render(st.Settings.Listen)
 		if os.Getenv("RP_DEBUG") != "" {
 			in.LogLevel = "INFO"
 		}
@@ -158,6 +163,7 @@ func main() {
 
 	srv := server.New(version, client, mgr, setupToken, secrets)
 	srv.CaddyVersion = caddyVersion()
+	srv.ListenEnv = listenEnv
 	srv.IssuanceLog = issuanceLog
 	srv.Observe = func(ctx context.Context, name string) certs.Observation {
 		return certs.Observe(ctx, "unix", *probeSock, name)
@@ -182,6 +188,7 @@ func main() {
 	go certs.Watch(ctx, mgr, srv.Observe, client.Stop)
 	go srv.WatchToken(ctx, 24*time.Hour)
 	go keepLoaded(ctx, mgr, client)
+	go answering.watch(ctx, mgr)
 	if err := srv.ServeUnix(ctx, *listen); err != nil {
 		log.Fatalf("[admin] %v", err)
 	}

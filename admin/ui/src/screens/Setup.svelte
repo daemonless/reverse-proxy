@@ -1,4 +1,5 @@
 <script lang="ts">
+  import NetworkChoice from '../components/NetworkChoice.svelte'
   import { post, put, get, ApiError, type Settings, type Token, type Certificates, type Provider } from '../lib/api'
   import { session } from '../lib/session.svelte'
   import { navigate } from '../lib/router.svelte'
@@ -9,7 +10,7 @@
   import PasswordStrength from '../components/PasswordStrength.svelte'
   import { strength } from '../lib/password'
 
-  type Step = 'welcome' | 'token' | 'password' | 'kind' | 'free' | 'address' | 'certs' | 'dns' | 'trust' | 'done' | 'restore'
+  type Step = 'welcome' | 'token' | 'password' | 'networks' | 'kind' | 'free' | 'address' | 'certs' | 'dns' | 'trust' | 'done' | 'restore'
   let step = $state<Step>('welcome')
   let token = $state('')
   let verified = $state(false)
@@ -41,12 +42,32 @@
   const isPublic = $derived(classify(domain) === 'public')
   const trustNeeded = $derived(!(isPublic && certsConnected))
   const rail = $derived.by(() => {
-    const r: { id: Step; label: string }[] = [{ id: 'token', label: 'Verify' }, { id: 'password', label: 'Password' }, { id: 'address', label: 'Names' }]
+    const r: { id: Step; label: string }[] = [{ id: 'token', label: 'Verify' }, { id: 'password', label: 'Password' }]
+    if (multi) r.push({ id: 'networks', label: 'Home network' })
+    r.push({ id: 'address', label: 'Names' })
     if (isPublic) r.push({ id: 'certs', label: 'Certificates' })
     r.push({ id: 'dns', label: 'Point names' })
     if (trustNeeded) r.push({ id: 'trust', label: 'Trust' })
     return r
   })
+  // A proxy on several networks asks which are home, before anything else
+  // depends on it: unticked ones cannot open it and are never home.
+  let nets = $state<Settings | null>(null)
+  const multi = $derived((nets?.networks?.length ?? 0) > 1)
+  let chosen = $state<string[]>([])
+  function takeNets(s: Settings) {
+    nets = s
+    chosen = s.listen?.length ? [...s.listen] : (s.networks ?? []).map((n) => n.network)
+  }
+  async function saveNetworks(e: SubmitEvent) {
+    e.preventDefault(); error = ''; busy = true
+    try {
+      const all = (nets?.networks ?? []).length
+      const s = await put<Settings>('/api/v1/listen', { listen: chosen.length === all ? [] : chosen })
+      takeNets(s)
+      await resumeAfterAddress(s)
+    } catch (err) { fail(err) } finally { busy = false }
+  }
   let suggestions = $state<string[]>([])
   // "Just for home" offers only endings that stay at home.
   const homeSuggestions = $derived(suggestions.filter((d) => classify(d) === 'private' && d !== 'home.lan'))
@@ -97,7 +118,7 @@
   }
   // Resuming while signed in (the password exists): skip what is done.
   if (session.value?.authenticated) {
-    get<Settings>('/api/v1/settings').then((s) => { domain = s.domain; if (!s.domain) loadSuggestions(); resumeAfterAddress(s) })
+    get<Settings>('/api/v1/settings').then((s) => { domain = s.domain; takeNets(s); if (!s.domain) loadSuggestions(); if (!s.domain && multi) step = 'networks'; else resumeAfterAddress(s) })
   }
   async function resumeAfterAddress(s: Settings) {
     if (!s.domain) { step = 'kind'; return }
@@ -122,8 +143,9 @@
     try {
       await post('/api/v1/setup/password', { password })
       const s = await get<Settings>('/api/v1/settings')
-      domain = s.domain; if (!s.domain) loadSuggestions()
-      await resumeAfterAddress(s)
+      domain = s.domain; takeNets(s); if (!s.domain) loadSuggestions()
+      if (multi && !s.domain) step = 'networks'
+      else await resumeAfterAddress(s)
       navigate('/setup', true)
       await session.refresh()
     } catch (err) { fail(err) } finally { busy = false }
@@ -269,6 +291,18 @@
           <div class="rounded-lg p-4 bg-warning-soft text-warning-soft-fg text-sm leading-snug">This password is weak: {strength(password).why.toLowerCase().replace(/\.$/, '')}. Anyone who can open this page could guess it. Choose another, or use it anyway.</div>
         {/if}
         <div class="flex justify-end"><button class="btn-primary" disabled={busy}>{weak && weakOk === password ? 'Use it anyway' : 'Continue'}</button></div>
+      </form>
+
+    {:else if step === 'networks'}
+      <form onsubmit={saveNetworks} class="contents">
+        <h1 class="m-0 text-2xl font-bold text-fg leading-tight">Which is your home network?</h1>
+        <p class="m-0 hint text-sm">This proxy is on {nets?.networks?.length} networks. It reaches your apps on all of them; devices on the ticked ones can open it and your home-only names.</p>
+        <div class="flex flex-col gap-1">
+          <NetworkChoice networks={nets?.networks ?? []} here={nets?.here ?? ''} {chosen} ontoggle={(n, on) => { chosen = on ? [...chosen, n] : chosen.filter((x) => x !== n) }} />
+        </div>
+        <p class="m-0 hint text-sm">Not sure? Leave them all ticked. You can change this later in Settings.</p>
+        {#if error}<div class="field-error">{error}</div>{/if}
+        <div class="flex justify-end"><button class="btn-primary" disabled={busy}>Continue</button></div>
       </form>
 
     {:else if step === 'kind'}

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/daemonless/reverse-proxy/admin/internal/backup"
+	"github.com/daemonless/reverse-proxy/admin/internal/state"
 )
 
 // createBackup streams an encrypted backup. The passphrase comes in the
@@ -76,7 +77,16 @@ func (s *Server) restoreBackup(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
-	if err := s.mgr.Restore(); err != nil {
+	iconMu.Lock()
+	err = s.mgr.Restore(func(st *state.State) bool {
+		listen, icons := s.fitListen(st), s.fitIcons(st)
+		return listen || icons
+	})
+	if err == nil {
+		s.tidyIcons()
+	}
+	iconMu.Unlock()
+	if err != nil {
 		writeError(w, err)
 		return
 	}

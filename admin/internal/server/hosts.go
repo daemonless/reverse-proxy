@@ -3,6 +3,7 @@ package server
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"maps"
 	"net/http"
 	"os"
 	"strconv"
@@ -298,6 +299,7 @@ func engineDomain(d string) bool {
 func (s *Server) getSettings(w http.ResponseWriter, r *http.Request) {
 	st := s.mgr.State()
 	out := settingsView(st.Settings)
+	maps.Copy(out, s.listenView(r, st.Settings))
 	out["fallbackUrl"] = FallbackURL(r.Context(), st.Settings)
 	writeJSON(w, http.StatusOK, out)
 }
@@ -347,6 +349,7 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 	// After a new ending the old name no longer opens; this is where the
 	// browser goes on from.
 	out := settingsView(s.mgr.State().Settings)
+	maps.Copy(out, s.listenView(r, s.mgr.State().Settings))
 	out["fallbackUrl"] = FallbackURL(r.Context(), before)
 	writeJSON(w, http.StatusOK, out)
 }

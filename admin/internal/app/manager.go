@@ -111,13 +111,19 @@ func (m *Manager) Note(mutate func(*state.State)) error {
 
 // Restore re-reads the state file (after a backup was written to disk),
 // renders it and loads it into Caddy. On failure the previous in-memory
-// state stays live.
-func (m *Manager) Restore() error {
+// state stays live. adapt, when set, fits the restored state to this
+// machine first, and what it changes is saved.
+func (m *Manager) Restore(adapt func(*state.State) bool) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	st, err := m.store.Load()
 	if err != nil {
 		return err
+	}
+	if adapt != nil && adapt(st) {
+		if err := m.store.Save(st); err != nil {
+			return fmt.Errorf("saving state: %w", err)
+		}
 	}
 	if m.Prepare != nil {
 		if err := m.Prepare(st); err != nil {

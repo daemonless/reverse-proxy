@@ -39,6 +39,15 @@
               "handle": [
                 {
                   "handler": "reverse_proxy",
+                  "headers": {
+                    "request": {
+                      "set": {
+                        "X-Rp-Local-Addr": [
+                          "{http.request.local.host}"
+                        ]
+                      }
+                    }
+                  },
                   "upstreams": [
                     {
                       "dial": "unix//var/run/reverse-proxy/admin.sock"
@@ -109,6 +118,15 @@
               "handle": [
                 {
                   "handler": "reverse_proxy",
+                  "headers": {
+                    "request": {
+                      "set": {
+                        "X-Rp-Local-Addr": [
+                          "{http.request.local.host}"
+                        ]
+                      }
+                    }
+                  },
                   "upstreams": [
                     {
                       "dial": "unix//var/run/reverse-proxy/admin.sock"
@@ -152,6 +170,15 @@
                       "handle": [
                         {
                           "handler": "reverse_proxy",
+                          "headers": {
+                            "request": {
+                              "set": {
+                                "X-Rp-Local-Addr": [
+                                  "{http.request.local.host}"
+                                ]
+                              }
+                            }
+                          },
                           "upstreams": [
                             {
                               "dial": "unix//var/run/reverse-proxy/admin.sock"
@@ -478,6 +505,15 @@
               "handle": [
                 {
                   "handler": "reverse_proxy",
+                  "headers": {
+                    "request": {
+                      "set": {
+                        "X-Rp-Local-Addr": [
+                          "{http.request.local.host}"
+                        ]
+                      }
+                    }
+                  },
                   "upstreams": [
                     {
                       "dial": "unix//var/run/reverse-proxy/admin.sock"

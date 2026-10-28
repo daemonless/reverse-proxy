@@ -615,6 +615,84 @@
           }
         }
       }
+    },
+    "/api/v1/hosts/{id}/icon": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/id"
+        }
+      ],
+      "get": {
+        "tags": [
+          "hosts"
+        ],
+        "summary": "The host's icon",
+        "description": "The image the app that made the name sent, as it was sent.",
+        "responses": {
+          "200": {
+            "description": "The icon.",
+            "content": {
+              "image/svg+xml": {},
+              "image/png": {},
+              "image/webp": {},
+              "image/jpeg": {}
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "description": "The host has no icon."
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "hosts"
+        ],
+        "summary": "Set the host's icon",
+        "description": "The image is the request body: SVG, PNG, WebP or JPEG, at most 256 KB, told apart by its bytes. The host's icon field becomes \"<hash>.<kind>\": send again only when the hash of your icon differs. Editing the host keeps it.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "image/svg+xml": {},
+            "image/png": {},
+            "image/webp": {},
+            "image/jpeg": {}
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The host, with its icon.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Host"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "description": "Nothing to restore.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Larger than 256 KB."
+          },
+          "415": {
+            "description": "Not an SVG, PNG, WebP or JPEG image."
+          }
+        }
+      }
     }
   },
   "components": {
@@ -899,6 +977,11 @@
                 "type": "string",
                 "format": "date-time",
                 "description": "Set on a removed host while it can still be restored."
+              },
+              "icon": {
+                "type": "string",
+                "description": "\"<hash>.<kind>\" of the icon set with PUT /api/v1/hosts/{id}/icon; absent when it has none.",
+                "example": "3fa9c2e17b0d4e55.svg"
               }
             }
           }

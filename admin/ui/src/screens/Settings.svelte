@@ -8,6 +8,7 @@
   import DnsGuide from '../components/DnsGuide.svelte'
   import ShortLinkGuide from '../components/ShortLinkGuide.svelte'
   import CertProvider from '../components/CertProvider.svelte'
+  import NetworkChoice, { netName } from '../components/NetworkChoice.svelte'
   import PasswordStrength from '../components/PasswordStrength.svelte'
   import { strength } from '../lib/password'
   import { credits, ourLicense, buildTools } from '../lib/credits'
@@ -147,6 +148,23 @@
     shortError = ''
     try { settings = { ...settings!, ...(await put<Settings>('/api/v1/settings', { domain: settings!.domain, trustedNetworks: settings!.trustedNetworks, shortLinks: word })) }; shortEdit = false; checkDns(); toast(word ? `Short links: ${word}/` : 'Short links are off') }
     catch (err) { shortError = err instanceof ApiError ? err.message : 'Something went wrong' }
+  }
+  // Home network: the proxy's own networks (ticked ones can open it and
+  // count as home) and networks routed to it, like a VPN.
+  let listenError = $state('')
+  const allNets = $derived((settings?.networks ?? []).map((n) => n.network))
+  const answering = $derived(settings?.listen?.length ? settings.listen : allNets)
+  async function toggleNet(n: string, on: boolean) {
+    const next = on ? [...answering, n] : answering.filter((x) => x !== n)
+    const listen = next.length === allNets.length ? [] : next
+    listenError = ''
+    try {
+      settings = { ...settings!, ...(await put<Settings>('/api/v1/listen', { listen })) }
+      toast(on ? `${netName(n)} is home again` : `${netName(n)} can no longer open the proxy`)
+    } catch (err) {
+      listenError = err instanceof ApiError ? err.message : 'Something went wrong'
+      settings = { ...settings! } // the boxes go back to what is saved
+    }
   }
   function addNet(e: SubmitEvent) { e.preventDefault(); if (newNet.trim()) saveNets([...settings!.trustedNetworks, newNet.trim()]) }
   function removeNet(n: string) {
@@ -352,13 +370,25 @@
   <section class="flex flex-col gap-2.5">
     <h3 class="m-0 text-sm text-muted font-semibold">Home network</h3>
     <div class="card px-6 py-5 flex flex-col gap-3">
-      <div class="hint text-sm">Devices on these networks count as home. Add your VPN here so it counts too.</div>
-      <div class="flex gap-2 flex-wrap items-center">
-        <span class="chip">All private addresses</span>
-        {#each settings.trustedNetworks as n (n)}
-          <span class="chip gap-2">{n}<button type="button" class="min-w-6 min-h-6 grid place-items-center rounded-full hover:bg-black/10 cursor-pointer" aria-label="Remove {n}" onclick={() => removeNet(n)}>×</button></span>
-        {/each}
-      </div>
+      {#if (settings.networks?.length ?? 0) > 1 || settings.listen?.length}
+        <div class="hint text-sm">This proxy is on {settings.networks?.length} networks and reaches your apps on all of them. Devices on the ticked ones can open it and your home-only names.</div>
+        {#if settings.listenSetBy}
+          <div class="text-sm">Only <span class="font-mono">{answering.map(netName).join(', ')}</span>. <span class="text-muted">{settings.listenSetBy} in the container's settings decides this.</span></div>
+        {:else}
+          <NetworkChoice networks={settings.networks ?? []} here={settings.here ?? ''} chosen={answering} ontoggle={toggleNet} />
+        {/if}
+        {#if listenError}<div class="field-error">{listenError}</div>{/if}
+        <div class="flex flex-col gap-1 mt-2"><span class="text-sm">Also home</span><span class="hint">Networks that reach the proxy through your router, like a VPN.</span></div>
+      {:else}
+        <div class="hint text-sm">Devices on your network count as home. Add your VPN here so it counts too.</div>
+      {/if}
+      {#if settings.trustedNetworks.length}
+        <div class="flex gap-2 flex-wrap items-center">
+          {#each settings.trustedNetworks as n (n)}
+            <span class="chip gap-2">{n}<button type="button" class="min-w-6 min-h-6 grid place-items-center rounded-full hover:bg-black/10 cursor-pointer" aria-label="Remove {n}" onclick={() => removeNet(n)}>×</button></span>
+          {/each}
+        </div>
+      {/if}
       <form onsubmit={addNet} class="flex gap-2 flex-wrap">
         <input class="input flex-1 basis-56 min-w-0" bind:value={newNet} placeholder="100.64.0.0/10" autocomplete="off" spellcheck="false" aria-label="Network to add" />
         <button class="btn-soft">Add network</button>

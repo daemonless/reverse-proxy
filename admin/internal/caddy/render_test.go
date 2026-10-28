@@ -359,3 +359,83 @@ func TestUnknownNamePageOnlyAtHome(t *testing.T) {
 		t.Fatalf("last route is not the drop for everyone else: %v", last)
 	}
 }
+
+func TestListenOnOneNetwork(t *testing.T) {
+	listens := func(listen []string) map[string][]string {
+		in := fixedInput(&state.State{Settings: state.Settings{Domain: "x.lan"}})
+		in.Listen = listen
+		servers := Render(in)["apps"].(map[string]any)["http"].(map[string]any)["servers"].(map[string]any)
+		out := map[string][]string{}
+		for _, name := range []string{"admin", "trust", "hosts"} {
+			out[name] = servers[name].(map[string]any)["listen"].([]string)
+		}
+		return out
+	}
+	for name, l := range listens(nil) {
+		if len(l) != 1 || !strings.HasPrefix(l[0], ":") {
+			t.Fatalf("every network: %s listens on %v", name, l)
+		}
+	}
+	got := listens([]string{"192.168.86.11", "2001:db8::5"})
+	if want := []string{"127.0.0.1:443", "192.168.86.11:443", "[2001:db8::5]:443"}; !slices.Equal(got["hosts"], want) {
+		t.Fatalf("one network: hosts listen on %v, want %v", got["hosts"], want)
+	}
+	if want := []string{"127.0.0.1:8443", "192.168.86.11:8443", "[2001:db8::5]:8443"}; !slices.Equal(got["admin"], want) {
+		t.Fatalf("one network: admin listens on %v, want %v", got["admin"], want)
+	}
+	// The network has no address yet (DHCP): loopback only, never all.
+	for name, l := range listens([]string{}) {
+		if len(l) != 1 || !strings.HasPrefix(l[0], "127.0.0.1:") {
+			t.Fatalf("network without an address: %s listens on %v", name, l)
+		}
+	}
+}
+
+func TestAdminLearnsTheLocalAddress(t *testing.T) {
+	up := adminUpstream(fixedInput(nil))
+	set := up["headers"].(map[string]any)["request"].(map[string]any)["set"].(map[string]any)
+	if v := set[LocalHeader].([]string); len(v) != 1 || v[0] != "{http.request.local.host}" {
+		t.Fatalf("%s: %v", LocalHeader, v)
+	}
+}
+
+func TestShutNetworksAreNeverHome(t *testing.T) {
+	now := time.Date(2026, 10, 28, 12, 0, 0, 0, time.UTC)
+	st := &state.State{Settings: state.Settings{Domain: "x.lan"}, Hosts: []state.Host{
+		{ID: "a", Name: "radarr", Target: state.Target{Address: "192.168.5.10", Port: 7878}, Access: state.AccessHome, CreatedAt: now},
+	}}
+	routes := func(shut []string) []any {
+		in := fixedInput(st)
+		in.Shut = shut
+		return Render(in)["apps"].(map[string]any)["http"].(map[string]any)["servers"].(map[string]any)["hosts"].(map[string]any)["routes"].([]any)
+	}
+	homeMatches := func(rs []any) (n int, nots []any) {
+		for _, r := range rs {
+			m, _ := r.(map[string]any)["match"].([]any)
+			if len(m) == 0 {
+				continue
+			}
+			set := m[0].(map[string]any)
+			if _, ok := set["remote_ip"]; ok {
+				n++
+				if not, ok := set["not"].([]any); ok {
+					nots = append(nots, not...)
+				}
+			}
+		}
+		return n, nots
+	}
+	if n, nots := homeMatches(routes(nil)); n != 2 || len(nots) != 0 {
+		t.Fatalf("every network: %d home matchers, %d nots", n, len(nots))
+	}
+	// The home-only name and the unknown-name page both refuse vlan4.
+	n, nots := homeMatches(routes([]string{"192.168.4.0/24"}))
+	if n != 2 || len(nots) != 2 {
+		t.Fatalf("vlan4 shut: %d home matchers, %d nots", n, len(nots))
+	}
+	for _, not := range nots {
+		if r := not.(map[string]any)["remote_ip"].(map[string]any)["ranges"].([]string); !slices.Equal(r, []string{"192.168.4.0/24"}) {
+			t.Fatalf("not: %v", r)
+		}
+	}
+}

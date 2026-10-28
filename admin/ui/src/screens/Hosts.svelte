@@ -4,12 +4,18 @@
   import { deviceTrust } from '../lib/trust.svelte'
   import { paired } from '../lib/paired.svelte'
   import { toast } from '../lib/toast.svelte'
+  import AppIcon from '../components/AppIcon.svelte'
 
   // The certificate banner: only while something is happening to it.
   let cert = $state<CertStatus | null>(null)
   async function loadCert() {
     try { cert = (await get<Certificates>('/api/v1/certificates')).status } catch { cert = null }
   }
+
+  // Cards or a list, remembered on this device; cards unless list was picked.
+  const VIEW = 'rp-names-view'
+  let cards = $state((() => { try { return localStorage.getItem(VIEW) !== 'list' } catch { return true } })())
+  function setCards(on: boolean) { cards = on; try { localStorage.setItem(VIEW, on ? 'cards' : 'list') } catch {} }
 
   let hosts = $state<Host[]>([])
   // Removed names (Undo window): shown folded, with Restore.
@@ -91,7 +97,17 @@
   <div class="flex items-center justify-between gap-4 flex-wrap">
     <h1 class="m-0 text-2xl font-bold text-fg">Names</h1>
     {#if hosts.length > 0}
-      <a href="/hosts/new" use:link class="btn-primary">Add a name</a>
+      <span class="flex items-center gap-3">
+        <span class="inline-flex rounded-lg bg-chip p-0.5" role="group" aria-label="Show names as">
+          <button type="button" class="min-w-10 min-h-9 grid place-items-center rounded-md border-0 cursor-pointer {cards ? 'bg-transparent text-muted hover:text-fg' : 'bg-card text-fg shadow-sm'}" aria-pressed={!cards} title="List" aria-label="List" onclick={() => setCards(false)}>
+            <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M3 5h14M3 10h14M3 15h14"></path></svg>
+          </button>
+          <button type="button" class="min-w-10 min-h-9 grid place-items-center rounded-md border-0 cursor-pointer {cards ? 'bg-card text-fg shadow-sm' : 'bg-transparent text-muted hover:text-fg'}" aria-pressed={cards} title="Cards" aria-label="Cards" onclick={() => setCards(true)}>
+            <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="5.5" height="5.5" rx="1"></rect><rect x="11.5" y="3" width="5.5" height="5.5" rx="1"></rect><rect x="3" y="11.5" width="5.5" height="5.5" rx="1"></rect><rect x="11.5" y="11.5" width="5.5" height="5.5" rx="1"></rect></svg>
+          </button>
+        </span>
+        <a href="/hosts/new" use:link class="btn-primary">Add a name</a>
+      </span>
     {/if}
   </div>
 
@@ -167,39 +183,72 @@
       <a href="/hosts/new" use:link class="btn-primary mt-2">Add a name</a>
     </div>
   {:else}
-    <div class="card overflow-hidden">
-      {#each hosts as h, i (h.id)}
-        {@const st = statusText(h)}
-        <!-- One line per name: the text column shrinks, the chips and
-             buttons keep their place on the right. -->
-        <div class="flex items-center gap-4 px-5 py-4 text-fg flex-wrap sm:flex-nowrap {i < hosts.length - 1 ? 'border-b border-[color:var(--border)]' : ''}">
-          <span class="w-3 h-3 rounded-full shrink-0 box-border {st.ok === true ? 'bg-success' : st.ok === false ? 'border-[3px] border-danger' : 'border-[3px] border-[color:var(--border)]'}"></span>
-          <a href="/hosts/{h.id}" use:link class="flex-1 basis-48 min-w-0 flex flex-col gap-0.5 text-fg no-underline hover:underline">
-            <span class="font-semibold text-sm break-all">{h.names[0]}</span>
-            <span class="text-xs {st.ok === false ? 'text-danger' : 'text-muted'}">{st.text}</span>
-          </a>
-          <!-- Chips say only what is not the usual: who made the name, and
-               a name open to the internet. Home-network-only is the default
-               and goes without saying. -->
-          <span class="ml-auto shrink-0 flex items-center gap-3 flex-wrap justify-end">
-            {#if h.ref}
-              <!-- A connected app made this host and keeps it pointed at the
-                   app; its ref starts with that app's name. -->
-              <span class="chip" title="{paired.appFor(h.ref)} made this name and keeps it pointed at the app. Edit the name here; the address follows the app.">From {paired.appFor(h.ref)}</span>
-            {/if}
-            {#if h.access === 'internet'}
-              <span class="chip bg-warning-soft text-warning-soft-fg font-semibold">Open to the internet</span>
-            {/if}
-            <span class="flex items-center gap-3 shrink-0">
-              <a href={h.url} target="_blank" rel="noopener" class="btn-soft min-h-10 px-3.5 text-sm shrink-0" aria-label="Open {h.names[0]}">Open ↗</a>
-              <a href="/hosts/{h.id}" use:link class="min-w-11 min-h-10 grid place-items-center rounded-lg text-muted hover:bg-chip" aria-label="Edit {h.names[0]}">
-                <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 4l6 6-6 6"></path></svg>
-              </a>
+    {#snippet dot(st: { ok: boolean | null })}
+      <span class="inline-block w-3 h-3 rounded-full shrink-0 box-border {st.ok === true ? 'bg-success' : st.ok === false ? 'border-[3px] border-danger' : 'border-[3px] border-[color:var(--border)]'}"></span>
+    {/snippet}
+    <!-- Chips say only what is not the usual: who made the name, and a name
+         open to the internet. Home-network-only is the default and goes
+         without saying. -->
+    {#snippet chips(h: Host)}
+      {#if h.ref}
+        <!-- A connected app made this host and keeps it pointed at the app;
+             its ref starts with that app's name. -->
+        <span class="chip" title="{paired.appFor(h.ref)} made this name and keeps it pointed at the app. Edit the name here; the address follows the app.">From {paired.appFor(h.ref)}</span>
+      {/if}
+      {#if h.access === 'internet'}
+        <span class="chip bg-warning-soft text-warning-soft-fg font-semibold">Open to the internet</span>
+      {/if}
+    {/snippet}
+    {#snippet actions(h: Host)}
+      <span class="flex items-center gap-3 shrink-0">
+        <a href={h.url} target="_blank" rel="noopener" class="btn-soft min-h-10 px-3.5 text-sm shrink-0" aria-label="Open {h.names[0]}">Open ↗</a>
+        <a href="/hosts/{h.id}" use:link class="min-w-11 min-h-10 grid place-items-center rounded-lg text-muted hover:bg-chip" aria-label="Edit {h.names[0]}">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 4l6 6-6 6"></path></svg>
+        </a>
+      </span>
+    {/snippet}
+    {#if cards}
+      <div class="grid gap-4 grid-cols-[repeat(auto-fill,minmax(min(100%,240px),1fr))]">
+        {#each hosts as h (h.id)}
+          {@const st = statusText(h)}
+          {@const [label, ...rest] = h.names[0].split('.')}
+          <div class="card p-4 flex flex-col gap-3 text-fg min-w-0">
+            <a href="/hosts/{h.id}" use:link class="flex items-start gap-3 text-fg no-underline group min-w-0">
+              <AppIcon host={h} size={48} />
+              <span class="flex-1 min-w-0 flex flex-col gap-1 pt-0.5">
+                <!-- Breaks at the dot, not inside the app's name. -->
+                <span class="font-semibold text-sm break-words group-hover:underline">{label}<wbr />.{rest.join('.')}</span>
+                <span class="flex items-start gap-2 text-xs {st.ok === false ? 'text-danger' : 'text-muted'}"><span class="mt-0.5 flex">{@render dot(st)}</span><span>{st.text}</span></span>
+              </span>
+            </a>
+            <span class="mt-auto flex items-center gap-2 flex-wrap">
+              {@render chips(h)}
+              <span class="ml-auto">{@render actions(h)}</span>
             </span>
-          </span>
-        </div>
-      {/each}
-    </div>
+          </div>
+        {/each}
+      </div>
+    {:else}
+      <div class="card overflow-hidden">
+        {#each hosts as h, i (h.id)}
+          {@const st = statusText(h)}
+          <!-- One line per name: the text column shrinks, the chips and
+               buttons keep their place on the right. -->
+          <div class="flex items-center gap-4 px-5 py-4 text-fg flex-wrap sm:flex-nowrap {i < hosts.length - 1 ? 'border-b border-[color:var(--border)]' : ''}">
+            {@render dot(st)}
+            <AppIcon host={h} size={32} />
+            <a href="/hosts/{h.id}" use:link class="flex-1 basis-48 min-w-0 flex flex-col gap-0.5 text-fg no-underline hover:underline">
+              <span class="font-semibold text-sm break-all">{h.names[0]}</span>
+              <span class="text-xs {st.ok === false ? 'text-danger' : 'text-muted'}">{st.text}</span>
+            </a>
+            <span class="ml-auto shrink-0 flex items-center gap-3 flex-wrap justify-end">
+              {@render chips(h)}
+              {@render actions(h)}
+            </span>
+          </div>
+        {/each}
+      </div>
+    {/if}
   {/if}
 
   {#if loaded && removed.length}

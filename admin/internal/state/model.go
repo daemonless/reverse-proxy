@@ -47,6 +47,10 @@ type Settings struct {
 	// ShortLinks is the one-word name that makes http://go/radarr open
 	// radarr.<Domain>, like go links at work: nil means "go", "" is off.
 	ShortLinks *string `json:"shortLinks,omitempty"`
+	// Listen are the networks (subnets, 192.168.86.0/24) the proxy answers
+	// on, for a container on several that reaches apps on all of them;
+	// none answers on every network.
+	Listen []string `json:"answerOn,omitempty"`
 }
 
 // DefaultShortLinks is the short-link name when none was chosen.
@@ -103,7 +107,10 @@ type Host struct {
 	// proxy). Requests from this name's own pages then reach it with its
 	// address in those headers. Off by default: most apps compare Origin
 	// with Host, and the rewrite would break them (Django).
-	OwnOrigin bool       `json:"ownOrigin,omitempty"`
+	OwnOrigin bool `json:"ownOrigin,omitempty"`
+	// Icon is "<hash>.<kind>" of the app's icon (server/icons.go); set by
+	// its own call, never by an edit of the host.
+	Icon      string     `json:"icon,omitempty"`
 	CreatedAt time.Time  `json:"createdAt"`
 	DeletedAt *time.Time `json:"deletedAt,omitempty"` // soft delete; Undo clears it
 }
@@ -241,6 +248,7 @@ func (st *State) Purge(now time.Time) {
 func (st *State) Clone() *State {
 	c := *st
 	c.Settings.TrustedNetworks = append([]string(nil), st.Settings.TrustedNetworks...)
+	c.Settings.Listen = append([]string(nil), st.Settings.Listen...)
 	if st.Settings.Sources.Fjord != nil {
 		f := *st.Settings.Sources.Fjord
 		c.Settings.Sources.Fjord = &f
