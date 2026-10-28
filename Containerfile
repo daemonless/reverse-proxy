@@ -9,6 +9,7 @@
 # admin (Go, embedded UI) runs as bsd and drives Caddy over unix sockets in
 # /var/run/reverse-proxy.
 ARG BASE_VERSION=15.1
+ARG FREEBSD_ARCH=amd64
 
 FROM ghcr.io/daemonless/base:${BASE_VERSION} AS caddy-build
 # Empty: the latest Caddy release, read from GitHub's releases/latest
@@ -34,12 +35,26 @@ RUN v="${CADDY_VERSION:-$(fetch -v -o /dev/null https://github.com/caddyserver/c
       --output /out/caddy && \
     /out/caddy version
 
-FROM ghcr.io/daemonless/base:${BASE_VERSION} AS ui-build
+FROM ghcr.io/daemonless/base:${BASE_VERSION} AS ui-amd64
 RUN pkg update && pkg install -y node24 npm-node24 && pkg clean -ay && rm -rf /var/cache/pkg/* /var/db/pkg/repos/*
 COPY admin/ui/package.json admin/ui/package-lock.json /src/ui/
 RUN cd /src/ui && npm ci --no-fund --no-audit
 COPY admin/ui/ /src/ui/
-RUN cd /src/ui && npm run build
+RUN cd /src/ui && npm run build && /src/ui/source-hash > /src/ui/source.sha256
+
+# The UI's build tools (rolldown, tailwind, lightningcss) have no FreeBSD
+# arm64 binaries, and the UI is the same on every arch: take it from the
+# amd64 image, which CI publishes before the arm64 build starts. The source
+# hash stops an older amd64 image's UI from shipping here.
+FROM ghcr.io/daemonless/base:${BASE_VERSION} AS ui-aarch64
+COPY admin/ui/ /src/ui/
+COPY --from=ghcr.io/daemonless/reverse-proxy:latest-amd64 /usr/local/share/reverse-proxy/ui/ /src/ui/dist/
+COPY --from=ghcr.io/daemonless/reverse-proxy:latest-amd64 /usr/local/share/reverse-proxy/ui-source.sha256 /src/ui/amd64.sha256
+RUN h="$(/src/ui/source-hash)" && \
+    { [ "$h" = "$(cat /src/ui/amd64.sha256)" ] || { echo "latest-amd64 has a different UI than this commit: build amd64 first" >&2; exit 1; }; } && \
+    cp /src/ui/amd64.sha256 /src/ui/source.sha256
+
+FROM ui-${FREEBSD_ARCH} AS ui-build
 
 FROM ghcr.io/daemonless/base:${BASE_VERSION} AS admin-build
 ARG APP_VER=0.1.0
@@ -76,6 +91,9 @@ RUN pkg update && \
 
 COPY --from=caddy-build /out/caddy /usr/local/bin/caddy
 COPY --from=admin-build /out/reverse-proxy /usr/local/bin/reverse-proxy
+# Embedded in the binary; kept as files for the arm64 build (above).
+COPY --from=ui-build /src/ui/dist/ /usr/local/share/reverse-proxy/ui/
+COPY --from=ui-build /src/ui/source.sha256 /usr/local/share/reverse-proxy/ui-source.sha256
 RUN mkdir -p /app /config /data && echo "${APP_VER}" > /app/version
 
 COPY root/ /

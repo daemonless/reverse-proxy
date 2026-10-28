@@ -1,0 +1,4 @@
+#!/bin/sh
+# One hash of the UI's sources, the same on every arch: the arm64 image build
+# checks it against the amd64 image it takes the built UI from.
+cd "$(dirname "$0")" && find index.html package.json package-lock.json svelte.config.js tsconfig.app.json tsconfig.json vite.config.ts public src -type f | LC_ALL=C sort | xargs sha256 -r | sha256 -q
