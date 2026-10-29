@@ -1,0 +1,17 @@
+#!/bin/sh
+# Socket directory: root-owned, group bsd. setgid so the sockets Caddy (root)
+# makes get the group bsd: FreeBSD does that by default, Linux needs the bit.
+# Nothing else runs here, so a socket left from an unclean stop is stale.
+rm -rf /var/run/reverse-proxy
+mkdir -p /var/run/reverse-proxy
+chown root:bsd /var/run/reverse-proxy
+chmod 2770 /var/run/reverse-proxy
+
+mkdir -p /config/secrets
+chown bsd:bsd /config/secrets
+chmod 0700 /config/secrets
+
+# Caddy (root) owns /data: certificates, ACME account, CA intermediate.
+mkdir -p /data
+chown root:root /data
+chmod 0700 /data

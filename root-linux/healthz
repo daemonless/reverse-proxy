@@ -1,0 +1,5 @@
+#!/bin/sh
+# As on FreeBSD: the admin answers on its socket, and answers 503 while Caddy
+# is not running. Asked directly, not through Caddy on :8443: a check before
+# the admin listened made Caddy log "admin.sock: no such file" at every boot.
+curl -sf -m 5 -o /dev/null --unix-socket /var/run/reverse-proxy/admin.sock http://admin/healthz

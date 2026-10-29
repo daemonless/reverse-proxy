@@ -1,0 +1,10 @@
+#!/bin/sh
+# Minimal init: run the one-shot cont-init scripts, then supervise the two
+# services with s6 (same layout as the FreeBSD image).
+set -e
+for f in /etc/cont-init.d/*; do
+    echo "[init] Running: $f"
+    "$f"
+done
+echo "[init] Initialization complete"
+exec s6-svscan /etc/services.d
