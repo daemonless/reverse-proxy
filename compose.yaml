@@ -148,6 +148,16 @@ x-daemonless:
     state file and writes Caddy's whole configuration from it: nothing is
     hand-edited, and a change Caddy refuses leaves the running one in place.
 
+  # fjord installs it as its names provider: it fills these variables, then
+  # gives the other apps names through the API on 8443 with the key.
+  provides:
+    names:
+      port: 8443
+      key: ${RP_PAIRING_KEY}
+      setup_token: ${RP_SETUP_TOKEN}
+      client_url: ${RP_PAIRING_URL}
+      client_id: ${RP_PAIRING_ID}
+      client_name: ${RP_PAIRING_NAME}
   docs:
     env:
       PUID: "User ID for the admin process (Caddy stays root to bind 80 and 443)"
@@ -159,6 +169,8 @@ x-daemonless:
       RP_PAIRING_KEY: "Admin only. A key (32+ random characters) an app that installed the proxy, such as fjord, uses to manage hosts; registered once as a connected app"
       RP_PAIRING_NAME: "Admin only. The connected app's name for RP_PAIRING_KEY. Default: Paired app"
       RP_SETUP_TOKEN: "Admin only. First-run setup token chosen by the installing app, so it can open setup for you. Default: a new one in the log"
+      RP_PAIRING_URL: "Admin only. Where the installing app is opened, shown as a way back to it. Optional."
+      RP_PAIRING_ID: "Admin only. The installing app's permanent id, so several of them are told apart. Optional."
     volumes:
       /config: "Admin state and secrets"
       /data: "Certificates, ACME account and the internal CA"
@@ -180,6 +192,12 @@ services:
       - PGID=1000
       - TZ=UTC
       # - RP_ADMIN_URL=https://192.168.1.5:8443
+      # Set by an app that installs the proxy (fjord); empty otherwise.
+      - RP_PAIRING_KEY=
+      - RP_PAIRING_NAME=fjord
+      - RP_PAIRING_ID=
+      - RP_SETUP_TOKEN=
+      - RP_PAIRING_URL=
 
     volumes:
       - /path/to/containers/reverse-proxy:/config
