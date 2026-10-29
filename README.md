@@ -61,12 +61,14 @@ services:
       - PUID=1000  # User ID for the admin process (Caddy stays root to bind 80 and 443)
       - PGID=1000  # Group ID for the admin process
       - TZ=UTC  # Timezone for the container
+      - RP_PAIRING_KEY=<RP_PAIRING_KEY>  # Admin only. A key (32+ random characters) an app that installed the proxy, such as fjord, uses to manage hosts; registered once as a connected app
+      - RP_PAIRING_NAME=fjord  # Admin only. The connected app's name for RP_PAIRING_KEY. Default: Paired app
+      - RP_PAIRING_ID=  # Admin only. The installing app's permanent id, so several of them are told apart. Optional.
+      - RP_SETUP_TOKEN=<RP_SETUP_TOKEN>  # Admin only. First-run setup token chosen by the installing app, so it can open setup for you. Default: a new one in the log
+      - RP_PAIRING_URL=  # Admin only. Where the installing app is opened, shown as a way back to it. Optional.
       # - RP_ADMIN_URL=  # Where you open the admin UI, e.g. https://192.168.1.5:8443. Optional: the proxy remembers the address you sign in at; this makes the first-run link exact before anyone has.
       # - RP_TRUST_PORT=  # Host port that reaches the HTTP trust page if you publish it on something other than 80. Optional.
       # - RP_DEBUG=  # Set to 1 for Caddy's full info-level log. Off by default so the log stays readable.
-      # - RP_PAIRING_KEY=  # Admin only. A key (32+ random characters) an app that installed the proxy, such as fjord, uses to manage hosts; registered once as a connected app
-      # - RP_PAIRING_NAME=  # Admin only. The connected app's name for RP_PAIRING_KEY. Default: Paired app
-      # - RP_SETUP_TOKEN=  # Admin only. First-run setup token chosen by the installing app, so it can open setup for you. Default: a new one in the log
     volumes:
       - "/containers/reverse-proxy:/config"
       - "/containers/reverse-proxy/data:/data"
@@ -90,6 +92,11 @@ DIRECTOR_PROJECT=reverse-proxy
 PUID=1000
 PGID=1000
 TZ=UTC
+RP_PAIRING_KEY=<RP_PAIRING_KEY>
+RP_PAIRING_NAME=fjord
+RP_PAIRING_ID=
+RP_SETUP_TOKEN=<RP_SETUP_TOKEN>
+RP_PAIRING_URL=
 ```
 
 **appjail-director.yml**:
@@ -114,6 +121,11 @@ services:
         - PUID: !ENV '${PUID}'
         - PGID: !ENV '${PGID}'
         - TZ: !ENV '${TZ}'
+        - RP_PAIRING_KEY: !ENV '${RP_PAIRING_KEY}'
+        - RP_PAIRING_NAME: !ENV '${RP_PAIRING_NAME}'
+        - RP_PAIRING_ID: !ENV '${RP_PAIRING_ID}'
+        - RP_SETUP_TOKEN: !ENV '${RP_SETUP_TOKEN}'
+        - RP_PAIRING_URL: !ENV '${RP_PAIRING_URL}'
     volumes:
       - reverse-proxy: /config
       - reverse-proxy_data: /data
@@ -160,6 +172,11 @@ services:
       - PUID=1000
       - PGID=1000
       - TZ=UTC
+      - RP_PAIRING_KEY=<RP_PAIRING_KEY>
+      - RP_PAIRING_NAME=fjord
+      - RP_PAIRING_ID=
+      - RP_SETUP_TOKEN=<RP_SETUP_TOKEN>
+      - RP_PAIRING_URL=
     volumes:
       - "/containers/reverse-proxy:/config"
       - "/containers/reverse-proxy/data:/data"
@@ -177,12 +194,14 @@ Open `http://<server>:80` from another machine (the server's own browser can't u
 | `PUID` | `1000` | User ID for the admin process (Caddy stays root to bind 80 and 443) |
 | `PGID` | `1000` | Group ID for the admin process |
 | `TZ` | `UTC` | Timezone for the container |
+| `RP_PAIRING_KEY` | `<RP_PAIRING_KEY>` | Admin only. A key (32+ random characters) an app that installed the proxy, such as fjord, uses to manage hosts; registered once as a connected app |
+| `RP_PAIRING_NAME` | `fjord` | Admin only. The connected app's name for RP_PAIRING_KEY. Default: Paired app |
+| `RP_PAIRING_ID` | `` | Admin only. The installing app's permanent id, so several of them are told apart. Optional. |
+| `RP_SETUP_TOKEN` | `<RP_SETUP_TOKEN>` | Admin only. First-run setup token chosen by the installing app, so it can open setup for you. Default: a new one in the log |
+| `RP_PAIRING_URL` | `` | Admin only. Where the installing app is opened, shown as a way back to it. Optional. |
 | `RP_ADMIN_URL` | `` | Where you open the admin UI, e.g. https://192.168.1.5:8443. Optional: the proxy remembers the address you sign in at; this makes the first-run link exact before anyone has. |
 | `RP_TRUST_PORT` | `` | Host port that reaches the HTTP trust page if you publish it on something other than 80. Optional. |
 | `RP_DEBUG` | `` | Set to 1 for Caddy's full info-level log. Off by default so the log stays readable. |
-| `RP_PAIRING_KEY` | `<RP_PAIRING_KEY>` | Admin only. A key (32+ random characters) an app that installed the proxy, such as fjord, uses to manage hosts; registered once as a connected app |
-| `RP_PAIRING_NAME` | `` | Admin only. The connected app's name for RP_PAIRING_KEY. Default: Paired app |
-| `RP_SETUP_TOKEN` | `<RP_SETUP_TOKEN>` | Admin only. First-run setup token chosen by the installing app, so it can open setup for you. Default: a new one in the log |
 
 ### Volumes
 
