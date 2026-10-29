@@ -10,11 +10,8 @@ on:
 
 jobs:
   build:
-    # Trial of dbuild#feat/linux-images: back to @main (and no dbuild_ref)
-    # once that is merged.
-    uses: daemonless/dbuild/.github/workflows/daemonless-build.yaml@feat/linux-images
+    uses: daemonless/dbuild/.github/workflows/daemonless-build.yaml@main
     with:
       image_name: reverse-proxy
-      dbuild_ref: feat/linux-images
       linux: true
     secrets: inherit
