@@ -139,8 +139,9 @@ type ApiToken struct {
 	Hash       string     `json:"hash"`
 	CreatedAt  time.Time  `json:"createdAt"`
 	LastUsedAt *time.Time `json:"lastUsedAt,omitempty"`
-	// Paired tokens came from RP_PAIRING_KEY: the app that installed the
-	// proxy chose the key, and sends it as the whole bearer token.
+	// Paired marks the app that installed the proxy. Its first key came
+	// from RP_PAIRING_KEY and is sent whole; after a relink with a code it
+	// holds an rp_ key like any other app.
 	Paired bool `json:"paired,omitempty"`
 	// Disabled keys are refused but kept, so Reconnect (or Undo) brings
 	// one back: a paired key cannot be shown again or re-entered.

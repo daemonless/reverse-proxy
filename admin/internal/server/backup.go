@@ -79,8 +79,8 @@ func (s *Server) restoreBackup(w http.ResponseWriter, r *http.Request) {
 	}
 	iconMu.Lock()
 	err = s.mgr.Restore(func(st *state.State) bool {
-		listen, icons := s.fitListen(st), s.fitIcons(st)
-		return listen || icons
+		listen, icons, tokens := s.fitListen(st), s.fitIcons(st), fitTokens(st)
+		return listen || icons || tokens
 	})
 	if err == nil {
 		s.tidyIcons()

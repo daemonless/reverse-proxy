@@ -146,6 +146,9 @@ func New(version string, caddy Runner, mgr *app.Manager, setupToken, secrets str
 		mgr.Note(func(next *state.State) { s.fitIcons(next) })
 	}
 	iconMu.Unlock()
+	if st := s.mgr.State().Clone(); fitTokens(st) {
+		mgr.Note(func(next *state.State) { fitTokens(next) })
+	}
 	return s
 }
 

@@ -61,8 +61,10 @@ func (s *Server) tokenValid(tok string) (string, bool) {
 	parts := strings.SplitN(tok, "_", 3)
 	if len(parts) == 3 && parts[0] == "rp" {
 		want := auth.HashSecret(parts[2])
-		for _, t := range s.mgr.State().Tokens {
-			if t.ID == parts[1] && !t.Paired && !t.Disabled && auth.EqualTokens(t.Hash, want) {
+		st := s.mgr.State()
+		for _, t := range st.Tokens {
+			// A key from RP_PAIRING_KEY is only good sent whole.
+			if t.ID == parts[1] && !t.Disabled && auth.EqualTokens(t.Hash, want) && !slices.Contains(st.PairedKeys, t.Hash) {
 				return t.ID, true
 			}
 		}

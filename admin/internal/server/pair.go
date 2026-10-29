@@ -83,7 +83,7 @@ func (s *Server) pair(w http.ResponseWriter, r *http.Request) {
 	secret := auth.NewSecret(32)
 	t := state.ApiToken{ID: id, Label: name, Hash: auth.HashSecret(secret), CreatedAt: time.Now().UTC(),
 		URL: cleanPairingURL(in.Client.URL), ClientID: cleanClientID(in.Client.ID)}
-	if err := s.mgr.Apply(func(st *state.State) error { st.Tokens = append(st.Tokens, t); return nil }); err != nil {
+	if err := s.mgr.Apply(func(st *state.State) error { st.Tokens = relinked(st.Tokens, t); return nil }); err != nil {
 		writeError(w, err)
 		return
 	}
@@ -101,6 +101,66 @@ func (s *Server) pair(w http.ResponseWriter, r *http.Request) {
 		out["rootUrl"] = "/trust/root.crt"
 	}
 	writeJSON(w, http.StatusCreated, out)
+}
+
+// relinked adds t, the key a code just gave an app, in place of the keys
+// that app had (same ClientID): it holds only the new one, and an old one
+// left behind showed the app as disconnected, or twice. The new key takes
+// over "installed this proxy".
+func relinked(tokens []state.ApiToken, t state.ApiToken) []state.ApiToken {
+	out := tokens[:0:0]
+	for _, x := range tokens {
+		if t.ClientID != "" && x.ClientID == t.ClientID {
+			t.Paired = t.Paired || x.Paired
+			if t.URL == "" {
+				t.URL = x.URL
+			}
+			continue
+		}
+		out = append(out, x)
+	}
+	return append(out, t)
+}
+
+// fitTokens keeps one key per app: the one it used last. A relink before
+// relinked, or a key that told /me an id another key had, left two.
+func fitTokens(st *state.State) bool {
+	used := func(t state.ApiToken) time.Time {
+		if t.LastUsedAt != nil {
+			return *t.LastUsedAt
+		}
+		return t.CreatedAt
+	}
+	latest := map[string]int{}
+	for i, t := range st.Tokens {
+		if t.ClientID == "" {
+			continue
+		}
+		if j, ok := latest[t.ClientID]; !ok || used(t).After(used(st.Tokens[j])) {
+			latest[t.ClientID] = i
+		}
+	}
+	changed := false
+	for i := 0; i < len(st.Tokens); i++ {
+		t := st.Tokens[i]
+		if t.ClientID == "" || latest[t.ClientID] == i {
+			continue
+		}
+		k := latest[t.ClientID]
+		st.Tokens[k].Paired = st.Tokens[k].Paired || t.Paired
+		if st.Tokens[k].URL == "" {
+			st.Tokens[k].URL = t.URL
+		}
+		st.Tokens = append(st.Tokens[:i], st.Tokens[i+1:]...)
+		for id, j := range latest {
+			if j > i {
+				latest[id] = j - 1
+			}
+		}
+		i--
+		changed = true
+	}
+	return changed
 }
 
 // me is PUT /api/v1/me: the app behind the key says who it is (id, name,
