@@ -1,11 +1,11 @@
 {
-  "generated": "2026-10-28T22:32:42Z",
+  "generated": "2026-10-29T09:34:00Z",
   "image": "reverse-proxy",
   "tags": {
     "latest-aarch64": {
       "app_version": "0.2.0",
       "arch": "aarch64",
-      "generated": "2026-10-28T22:32:14Z",
+      "generated": "2026-10-29T09:33:28Z",
       "packages": {
         "dotnet": [],
         "freebsd": [
@@ -182,7 +182,7 @@
               "BSD2CLAUSE"
             ],
             "name": "FreeBSD-runtime",
-            "version": "15.1p5"
+            "version": "15.1p6"
           },
           {
             "licenses": [
