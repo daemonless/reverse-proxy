@@ -1,0 +1,68 @@
+# reverse-proxy on Linux, built only by dbuild's shared GitHub workflow
+# (build-linux job): the same Caddy with the same DNS modules, the same
+# admin and UI, on Alpine with s6. Caddy runs as root to bind 80/443; the
+# admin runs as bsd (PUID/PGID), as on FreeBSD. Keep APP_VER with
+# Containerfile.j2's: the manifest adds this image to a tag only when the
+# versions agree.
+ARG APP_VER=0.2.0
+ARG CADDY_VERSION=
+
+FROM golang:1.26-alpine AS caddy-build
+ARG CADDY_VERSION
+RUN apk add --no-cache git ca-certificates curl && \
+    go install github.com/caddyserver/xcaddy/cmd/xcaddy@v0.4.7
+RUN v="${CADDY_VERSION:-$(curl -fsSI https://github.com/caddyserver/caddy/releases/latest | grep -io 'releases/tag/v[^[:space:]]*' | head -1 | cut -d/ -f3)}" && \
+    test -n "$v" && \
+    CGO_ENABLED=0 GOFLAGS=-buildvcs=false xcaddy build "$v" \
+      --with github.com/caddy-dns/cloudflare \
+      --with github.com/caddy-dns/route53 \
+      --with github.com/caddy-dns/desec \
+      --with github.com/caddy-dns/porkbun \
+      --with github.com/caddy-dns/hetzner \
+      --with github.com/caddy-dns/ovh \
+      --with github.com/caddy-dns/gandi \
+      --with github.com/caddy-dns/rfc2136 \
+      --with github.com/caddy-dns/acmedns \
+      --with github.com/caddy-dns/duckdns@v0.5.0 \
+      --output /out/caddy && \
+    /out/caddy version
+
+FROM node:24-alpine AS ui-build
+COPY admin/ui/package.json admin/ui/package-lock.json /src/ui/
+RUN cd /src/ui && npm ci --no-fund --no-audit
+COPY admin/ui/ /src/ui/
+RUN cd /src/ui && npm run build
+
+FROM golang:1.26-alpine AS admin-build
+ARG APP_VER
+COPY admin/ /src/
+COPY --from=ui-build /src/ui/dist/ /src/ui/dist/
+RUN cd /src && CGO_ENABLED=0 go build -trimpath \
+      -ldflags "-s -w -X main.version=${APP_VER}" \
+      -o /out/reverse-proxy ./cmd/reverse-proxy
+
+FROM alpine:3.24
+ARG APP_VER
+LABEL org.opencontainers.image.title="Daemonless Reverse Proxy" \
+      org.opencontainers.image.description="Friendly HTTPS names for the services on your network: a managed Caddy reverse proxy with a web UI, secure by default." \
+      org.opencontainers.image.source="https://github.com/daemonless/reverse-proxy" \
+      org.opencontainers.image.url="https://daemonless.io/images/reverse-proxy/" \
+      org.opencontainers.image.licenses="BSD-2-Clause" \
+      org.opencontainers.image.vendor="daemonless" \
+      org.opencontainers.image.authors="daemonless" \
+      io.daemonless.category="Network" \
+      io.daemonless.port="8443" \
+      io.daemonless.volumes="/config,/data"
+RUN apk add --no-cache s6 ca-certificates tzdata curl && \
+    addgroup -g 1000 bsd && adduser -D -H -u 1000 -G bsd -s /sbin/nologin bsd && \
+    mkdir -p /app /config /data && echo "${APP_VER}" > /app/version
+COPY --from=caddy-build /out/caddy /usr/local/bin/caddy
+COPY --from=admin-build /out/reverse-proxy /usr/local/bin/reverse-proxy
+COPY --from=ui-build /src/ui/dist/ /usr/local/share/reverse-proxy/ui/
+COPY root/etc/reverse-proxy/bootstrap.json /etc/reverse-proxy/bootstrap.json
+COPY root-linux/ /
+RUN chmod +x /init /healthz /usr/local/bin/s6-ready-when /etc/cont-init.d/* /etc/services.d/*/run
+EXPOSE 80 443 8443
+VOLUME ["/config", "/data"]
+HEALTHCHECK --interval=30s --timeout=10s CMD /healthz
+ENTRYPOINT ["/init"]

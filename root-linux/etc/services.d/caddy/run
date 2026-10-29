@@ -1,0 +1,9 @@
+#!/bin/sh
+export XDG_DATA_HOME=/data
+export XDG_CONFIG_HOME=/data
+SOCK=/var/run/reverse-proxy/caddy.sock
+# Linux gives a new unix socket the creator's group, not the directory's
+# (FreeBSD does the latter), so hand it to bsd once Caddy has made it.
+( i=0; while [ ! -S "$SOCK" ] && [ $i -lt 300 ]; do sleep 0.2; i=$((i+1)); done; chgrp bsd "$SOCK" 2>/dev/null ) &
+s6-ready-when test -S "$SOCK"
+exec /usr/local/bin/caddy run --config /etc/reverse-proxy/bootstrap.json 2>&1
