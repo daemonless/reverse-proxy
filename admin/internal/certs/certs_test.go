@@ -81,6 +81,16 @@ func TestCompute(t *testing.T) {
 	if s := Compute(pub(state.StageTrial), Observation{Issuer: IssuerStaging}, newErr, nil, "", now); s.State != "issuing" {
 		t.Fatalf("staging served: %s", s.State)
 	}
+	// A trial with no answer either way stops spinning after TrialPatience,
+	// and a staging certificate still moves it on after that.
+	stuck := pub(state.StageTrial)
+	stuck.Certificates.StartedAt = now.Add(-92 * time.Minute)
+	if s := Compute(stuck, Observation{}, nil, nil, "example.org", now); s.State != "failed" || !strings.Contains(s.Message, "92 minutes") {
+		t.Fatalf("stuck trial: %+v", s)
+	}
+	if s := Compute(stuck, Observation{Issuer: IssuerStaging}, nil, nil, "example.org", now); s.State != "issuing" {
+		t.Fatalf("stuck, then staging served: %s", s.State)
+	}
 	if s := Compute(pub(state.StageLive), Observation{Issuer: IssuerStaging}, nil, nil, "", now); s.State != "issuing" {
 		t.Fatalf("live, still staging: %s", s.State)
 	}
@@ -158,5 +168,20 @@ func TestRedactKeepsTokensOutOfDetails(t *testing.T) {
 	_, detail := Explain("DuckDNS request failed, expected (OK) but got (KO), url: [https://www.duckdns.org/update?domains=you&token="+tok+"&txt=abc], body: KO", "you.duckdns.org", "DuckDNS")
 	if strings.Contains(detail, tok) || !strings.Contains(detail, "token=…&txt=abc") {
 		t.Fatalf("token in detail: %s", detail)
+	}
+}
+
+func TestLastLine(t *testing.T) {
+	dir := t.TempDir()
+	log := filepath.Join(dir, "issuance.log")
+	os.WriteFile(log, []byte(`{"ts":1793360000.5,"msg":"obtaining certificate","identifier":"*.example.org"}
+{"ts":1793360030.5,"msg":"waiting on internal rate limiter","identifiers":["*.example.org"]}
+{"ts":1793360040.5,"msg":"obtaining certificate","identifier":"*.other.nz"}
+`), 0o644)
+	if got := LastLine(log, "*.example.org"); !strings.HasSuffix(got, " waiting on internal rate limiter") {
+		t.Errorf("LastLine = %q", got)
+	}
+	if got := LastLine(filepath.Join(dir, "none"), "*.example.org"); got != "" {
+		t.Errorf("no log: %q", got)
 	}
 }

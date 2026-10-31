@@ -37,7 +37,11 @@ func (s *Server) certStatus(ctx context.Context, st *state.State) certs.Status {
 		bad = nil // renewed since: the token works again
 	}
 	s.mu.Unlock()
-	return certs.Compute(st.Settings, obs, ev, bad, st.Settings.Domain, time.Now())
+	status := certs.Compute(st.Settings, obs, ev, bad, st.Settings.Domain, time.Now())
+	if status.State == "failed" && status.Detail == "" && s.IssuanceLog != "" {
+		status.Detail = certs.LastLine(s.IssuanceLog, "*."+st.Settings.Domain)
+	}
+	return status
 }
 
 // WatchToken asks the DNS provider once a day whether the saved token

@@ -8,6 +8,7 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log"
 	"math"
@@ -59,6 +60,45 @@ func Observe(ctx context.Context, network, addr, serverName string) Observation 
 		obs.Issuer = IssuerLetsEncrypt
 	}
 	return obs
+}
+
+// TrialPatience is how long the trial runs before the page says it is stuck.
+const TrialPatience = 10 * time.Minute
+
+// LastLine is the newest line Caddy logged about identifier, whatever it
+// says, for a person to read: "09:14:05 waiting on internal rate limiter".
+func LastLine(path, identifier string) string {
+	f, err := os.Open(path)
+	if err != nil {
+		return ""
+	}
+	defer f.Close()
+	const tail = 256 << 10
+	if fi, err := f.Stat(); err == nil && fi.Size() > tail {
+		f.Seek(fi.Size()-tail, io.SeekStart)
+	}
+	last := ""
+	sc := bufio.NewScanner(f)
+	sc.Buffer(make([]byte, 64<<10), 1<<20)
+	for sc.Scan() {
+		line := sc.Bytes()
+		if !bytes.Contains(line, []byte(identifier)) {
+			continue
+		}
+		var rec struct {
+			TS    float64 `json:"ts"`
+			Msg   string  `json:"msg"`
+			Error string  `json:"error"`
+		}
+		if json.Unmarshal(line, &rec) != nil || rec.Msg == "" {
+			continue
+		}
+		last = time.Unix(0, int64(rec.TS*float64(time.Second))).Local().Format("15:04:05") + " " + rec.Msg
+		if rec.Error != "" {
+			last += ": " + redact(rec.Error)
+		}
+	}
+	return last
 }
 
 // Event is the last thing Caddy logged about the wildcard.
@@ -245,6 +285,13 @@ func Compute(s state.Settings, obs Observation, ev *Event, check *dns.Problem, z
 			st.State = "issuing" // the watcher moves to live any moment
 		case fresh && ev.Error != "":
 			return failed()
+		case !c.StartedAt.IsZero() && now.Sub(c.StartedAt) > TrialPatience:
+			// Caddy retries without the line explain reads (waiting on DNS,
+			// on its rate limiter): the page spun on "Proving you own" for
+			// 92 minutes. Said here, with Caddy's last line as the detail;
+			// it keeps trying, and a staging certificate still moves it on.
+			st.State = "failed"
+			st.Message = fmt.Sprintf("Proving you own %s is taking far longer than it should: %d minutes, where it usually takes one to three. The proxy keeps trying; Details shows the last thing it logged.", zone, int(now.Sub(c.StartedAt).Minutes()))
 		default:
 			st.State = "trial"
 		}
