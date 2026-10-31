@@ -1,10 +1,12 @@
 <script lang="ts">
-  import { get, post, type Host, type Health, type Settings, type Certificates, type CertStatus, type DnsCheck } from '../lib/api'
+  import { get, post, type Host, type Health, type Uptime, type Settings, type Certificates, type CertStatus, type DnsCheck } from '../lib/api'
   import { link, navigate } from '../lib/router.svelte'
   import { deviceTrust } from '../lib/trust.svelte'
   import { paired } from '../lib/paired.svelte'
   import { toast } from '../lib/toast.svelte'
   import AppIcon from '../components/AppIcon.svelte'
+  import UptimeBars from '../components/UptimeBars.svelte'
+  import { hourSlots, pct, span, when } from '../lib/uptime'
 
   // The certificate banner: only while something is happening to it.
   let cert = $state<CertStatus | null>(null)
@@ -49,13 +51,17 @@
     else if (apps.length > 1) parts.push(`${apps.slice(0, -1).join(', ')} and ${apps[apps.length - 1]} are connected`)
     return parts.join(', ')
   })
-  // When each host was first seen down, so the row can say since when.
-  let downSince = $state<Record<string, number>>({})
-  function noteHealth(h: Record<string, Health>) {
-    const next: Record<string, number> = {}
-    for (const [id, st] of Object.entries(h)) if (!st.reachable) next[id] = downSince[id] ?? Date.now()
-    downSince = next; health = h
+  // The proxy checks every name once a minute whether this page is open or
+  // not; the rows say what it found. The one-off probe on load answers
+  // until the first check, and says when a name points back at the proxy.
+  let uptime = $state<Record<string, Uptime>>({})
+  // Off in Settings, or for one name: that name says what the probe on
+  // load found, and shows no history.
+  let uptimeOn = $state(true)
+  async function loadUptime() {
+    try { const r = await get<{ uptime: Record<string, Uptime>; enabled: boolean }>('/api/v1/hosts/uptime'); uptime = r.uptime; uptimeOn = r.enabled } catch {}
   }
+  const watched = (h: Host) => uptimeOn && !h.unwatched
   let settings = $state<Settings | null>(null)
   let loaded = $state(false)
 
@@ -67,7 +73,8 @@
     if (s.mode === 'public') loadCert()
     paired.load()
     get<DnsCheck>('/api/v1/dns-check').then((d) => { dns = d }).catch(() => { dns = { name: '', addresses: [], proxyAddresses: [] } })
-    noteHealth((await get<{ health: Record<string, Health> }>('/api/v1/hosts/health')).health)
+    loadUptime()
+    health = (await get<{ health: Record<string, Health> }>('/api/v1/hosts/health')).health
   }
   load()
   async function restore(h: Host) {
@@ -78,18 +85,21 @@
   const onChanged = () => load()
   window.addEventListener('hosts-changed', onChanged)
   $effect(() => () => window.removeEventListener('hosts-changed', onChanged))
-  const every = setInterval(() => { get<{ health: Record<string, Health> }>('/api/v1/hosts/health').then((r) => noteHealth(r.health)).catch(() => {}) }, 15000)
+  const every = setInterval(loadUptime, 30000)
   $effect(() => () => clearInterval(every))
   const certEvery = setInterval(() => { if (cert && cert.state !== 'ok') loadCert() }, 5000)
   $effect(() => () => clearInterval(certEvery))
 
   function statusText(h: Host): { text: string; ok: boolean | null } {
     const s = health[h.id]
+    const u = watched(h) ? uptime[h.id] : undefined
+    const at = `${h.target.address}, port ${h.target.port}`
+    if (s?.self) return { text: `Points back at this proxy · edit it and give the address the service has, not ${h.target.address}`, ok: false }
+    if (u?.state === 'down' && u.never) return { text: `Never reached · check that the proxy can reach ${at}`, ok: false }
+    if (u?.state === 'down') return { text: `Not responding since ${when(u.since ?? '')} · check that the service at ${at} is running`, ok: false }
+    if (u?.state === 'up' || s?.reachable) return { text: `Working · goes to ${at}`, ok: true }
     if (!s) return { text: 'Checking…', ok: null }
-    if (s.self) return { text: `Points back at this proxy · edit it and give the address the service has, not ${h.target.address}`, ok: false }
-    if (s.reachable) return { text: `Working · goes to ${h.target.address}, port ${h.target.port}`, ok: true }
-    const since = downSince[h.id] ? new Date(downSince[h.id]).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''
-    return { text: `Not responding${since ? ' since ' + since : ''} · check that the service at ${h.target.address}, port ${h.target.port} is running`, ok: false }
+    return { text: `Not responding · check that the service at ${at} is running`, ok: false }
   }
 </script>
 
@@ -183,6 +193,18 @@
       <a href="/hosts/new" use:link class="btn-primary mt-2">Add a name</a>
     </div>
   {:else}
+    <!-- The last 24 hours, one bar each, and the month's share. -->
+    {#snippet history(h: Host)}
+      {@const u = watched(h) ? uptime[h.id] : undefined}
+      {#if u && u.month != null}
+        <!-- The figure goes under the bars when there's no room beside
+             them (cards), never past the edge. -->
+        <span class="flex items-center flex-wrap gap-x-2 gap-y-1 mt-1 min-w-0">
+          <span class="flex-1 basis-[120px] max-w-[200px]"><UptimeBars slots={hourSlots(u.hours, 24)} unit="hour" height={12} /></span>
+          <span class="text-xs text-muted tabular-nums whitespace-nowrap">{pct(u.month)} · {span(u.from, 30)}</span>
+        </span>
+      {/if}
+    {/snippet}
     {#snippet dot(st: { ok: boolean | null })}
       <span class="inline-block w-3 h-3 rounded-full shrink-0 box-border {st.ok === true ? 'bg-success' : st.ok === false ? 'border-[3px] border-danger' : 'border-[3px] border-[color:var(--border)]'}"></span>
     {/snippet}
@@ -219,6 +241,7 @@
                 <!-- Breaks at the dot, not inside the app's name. -->
                 <span class="font-semibold text-sm break-words group-hover:underline">{label}<wbr />.{rest.join('.')}</span>
                 <span class="flex items-start gap-2 text-xs {st.ok === false ? 'text-danger' : 'text-muted'}"><span class="mt-0.5 flex">{@render dot(st)}</span><span>{st.text}</span></span>
+                {@render history(h)}
               </span>
             </a>
             <span class="mt-auto flex items-center gap-2 flex-wrap">
@@ -240,6 +263,7 @@
             <a href="/hosts/{h.id}" use:link class="flex-1 basis-48 min-w-0 flex flex-col gap-0.5 text-fg no-underline hover:underline">
               <span class="font-semibold text-sm break-all">{h.names[0]}</span>
               <span class="text-xs {st.ok === false ? 'text-danger' : 'text-muted'}">{st.text}</span>
+              {@render history(h)}
             </a>
             <span class="ml-auto shrink-0 flex items-center gap-3 flex-wrap justify-end">
               {@render chips(h)}

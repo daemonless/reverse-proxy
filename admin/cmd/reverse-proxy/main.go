@@ -30,6 +30,7 @@ import (
 	"github.com/daemonless/reverse-proxy/admin/internal/dns"
 	"github.com/daemonless/reverse-proxy/admin/internal/server"
 	"github.com/daemonless/reverse-proxy/admin/internal/state"
+	"github.com/daemonless/reverse-proxy/admin/internal/uptime"
 )
 
 var version = "dev"
@@ -189,8 +190,27 @@ func main() {
 	go srv.WatchToken(ctx, 24*time.Hour)
 	go keepLoaded(ctx, mgr, client)
 	go answering.watch(ctx, mgr)
+	// Every name's target, checked in the background; its history is not
+	// configuration and stays out of backups.
+	mon := uptime.Open(filepath.Join(*stateDir, "uptime.json"))
+	mon.Notify = srv.Alert
+	srv.Uptime = mon
+	go mon.Run(ctx, func() []uptime.Target {
+		st := mgr.State()
+		var out []uptime.Target
+		for _, h := range st.Hosts {
+			out = append(out, uptime.Target{ID: h.ID, Name: h.Names(st.Settings)[0], Address: h.Target.Address, Port: h.Target.Port,
+				Skip: h.DeletedAt != nil || h.Unwatched || st.Settings.UptimeOff})
+		}
+		return out
+	})
 	if err := srv.ServeUnix(ctx, *listen); err != nil {
 		log.Fatalf("[admin] %v", err)
+	}
+	// The history's last save, before the process ends.
+	select {
+	case <-mon.Done():
+	case <-time.After(5 * time.Second):
 	}
 }
 

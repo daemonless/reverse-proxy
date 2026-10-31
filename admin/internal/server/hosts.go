@@ -26,6 +26,8 @@ type hostInput struct {
 	// OwnOrigin is kept as it was when absent: a client that predates it
 	// (fjord's port follow PUTs the host back) must not switch it off.
 	OwnOrigin *bool `json:"ownOrigin,omitempty"`
+	// Watch is kept as it was when absent, for the same reason.
+	Watch *bool `json:"watch,omitempty"`
 }
 
 // hostView is a host as the API presents it, with the names resolved.
@@ -71,6 +73,9 @@ func (in hostInput) apply(h *state.Host) {
 	}
 	if in.OwnOrigin != nil {
 		h.OwnOrigin = *in.OwnOrigin
+	}
+	if in.Watch != nil {
+		h.Unwatched = !*in.Watch
 	}
 }
 

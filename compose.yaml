@@ -25,7 +25,8 @@ x-daemonless:
 
       **What it does**
 
-      - **A name and a padlock for every app.** Paste where an app is; the proxy finds out whether it speaks HTTP or HTTPS and checks that it answers. Each name shows whether its app is up.
+      - **A name and a padlock for every app.** Paste where an app is; the proxy finds out whether it speaks HTTP or HTTPS and checks that it answers.
+      - **Tells you when an app is down.** Every name is checked once a minute: its last 24 hours and its uptime show on the Names page, 90 days and the outages on its own. A message to ntfy or a webhook when one stops answering, and again when it is back.
       - **Three kinds of names, your choice.** *Just for home* (`radarr.home.lan`): free, works without the internet; the proxy is its own certificate authority, limited to your ending, and walks each phone and computer through trusting it once, with a QR code. *A free name* (`radarr.you.duckdns.org`) or *your own domain* (`radarr.example.com`): real certificates from Let's Encrypt, one wildcard for every name, renewed by itself; nothing to install on any device. It picks your DNS provider from the domain (Cloudflare, Route 53, DuckDNS, deSEC, Porkbun, Hetzner, OVH, Gandi, RFC 2136, acme-dns) and tries the token on Let's Encrypt's test service first.
       - **Home only, unless you say so.** Every name opens only for devices on your home network. Open one to the internet when you want to; outsiders asking for any other name get nothing back, not even a "not found". On a host with several networks, you pick which are home: the proxy still reaches apps on the others.
       - **Short links.** Type `go/radarr` in any browser on your network. `go/` alone lists every name.

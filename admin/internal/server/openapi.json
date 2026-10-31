@@ -693,6 +693,120 @@
           }
         }
       }
+    },
+    "/api/v1/hosts/uptime": {
+      "get": {
+        "tags": [
+          "hosts"
+        ],
+        "summary": "Every host's uptime",
+        "description": "The proxy connects to each live host's target once a minute in the background. One summary per host id, with the last 24 hours.",
+        "responses": {
+          "200": {
+            "description": "One summary per host id.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "uptime",
+                    "every"
+                  ],
+                  "properties": {
+                    "uptime": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "$ref": "#/components/schemas/Uptime"
+                      }
+                    },
+                    "every": {
+                      "type": "integer",
+                      "description": "seconds between checks"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/api/v1/hosts/{id}/uptime": {
+      "get": {
+        "tags": [
+          "hosts"
+        ],
+        "summary": "One host's uptime history",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/id"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The history: hourly counts for up to 90 days and the last outages.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Uptime"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "hours": {
+                          "type": "array",
+                          "description": "up to 90 days",
+                          "items": {
+                            "type": "array",
+                            "description": "[hour start (unix seconds), checks, checks answered, sum of the answered checks' connect times in ms]",
+                            "items": {
+                              "type": "integer"
+                            },
+                            "minItems": 4,
+                            "maxItems": 4
+                          }
+                        },
+                        "outages": {
+                          "type": "array",
+                          "description": "the last 50",
+                          "items": {
+                            "type": "object",
+                            "required": [
+                              "start"
+                            ],
+                            "properties": {
+                              "start": {
+                                "type": "string",
+                                "format": "date-time"
+                              },
+                              "end": {
+                                "type": "string",
+                                "format": "date-time",
+                                "description": "absent while it lasts"
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "description": "No such host."
+          }
+        }
+      }
     }
   },
   "components": {
@@ -934,6 +1048,10 @@
             "type": "boolean",
             "default": false,
             "description": "The service checks Origin and Referer against its own address (UniFi does): requests from this name's own pages reach it with its address in those headers. Off by default, since most services compare Origin with the Host they are given. Left as it was when a PUT omits it."
+          },
+          "watch": {
+            "type": "boolean",
+            "description": "check that it is up (uptime and alerts); true when created without it. Left out of an update, it stays as it was."
           }
         }
       },
@@ -982,6 +1100,10 @@
                 "type": "string",
                 "description": "\"<hash>.<kind>\" of the icon set with PUT /api/v1/hosts/{id}/icon; absent when it has none.",
                 "example": "3fa9c2e17b0d4e55.svg"
+              },
+              "unwatched": {
+                "type": "boolean",
+                "description": "not checked for uptime; no alerts"
               }
             }
           }
@@ -1064,6 +1186,73 @@
             "type": "string",
             "format": "date-time",
             "description": "When the root expires."
+          }
+        }
+      },
+      "Uptime": {
+        "type": "object",
+        "required": [
+          "state",
+          "hours"
+        ],
+        "properties": {
+          "state": {
+            "type": "string",
+            "enum": [
+              "up",
+              "down",
+              "unknown"
+            ],
+            "description": "down after two failed checks in a row; unknown until it has answered once"
+          },
+          "since": {
+            "type": "string",
+            "format": "date-time",
+            "description": "when the current state began (down: the first failed check)"
+          },
+          "never": {
+            "type": "boolean",
+            "description": "down and never seen answering since it was added: no alert is sent for it"
+          },
+          "day": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "percent of checks answered in the last 24 hours; null when none ran"
+          },
+          "week": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "month": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "avgMs": {
+            "type": "integer",
+            "description": "average connect time over the last 24 hours"
+          },
+          "hours": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "description": "[hour start (unix seconds), checks, checks answered, sum of the answered checks' connect times in ms]",
+              "items": {
+                "type": "integer"
+              },
+              "minItems": 4,
+              "maxItems": 4
+            }
+          },
+          "from": {
+            "type": "string",
+            "format": "date-time",
+            "description": "start of the oldest hour kept; the percentages cover no more than that"
           }
         }
       }

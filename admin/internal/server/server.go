@@ -26,6 +26,7 @@ import (
 	"github.com/daemonless/reverse-proxy/admin/internal/dns"
 	"github.com/daemonless/reverse-proxy/admin/internal/netif"
 	"github.com/daemonless/reverse-proxy/admin/internal/state"
+	"github.com/daemonless/reverse-proxy/admin/internal/uptime"
 )
 
 // Runner answers whether Caddy is up.
@@ -65,12 +66,16 @@ type Server struct {
 	// ListenEnv is RP_LISTEN, which overrides the saved choice.
 	Networks  func() []netif.Network
 	ListenEnv string
+	// Uptime is the background checker's history; nil in tests.
+	Uptime *uptime.Monitor
 
-	mu       sync.Mutex
-	tokenBad *dns.Problem         // the last daily token check, when it failed
-	tokenAt  time.Time            // when tokenBad was found
-	setupTok string               // one-time token from the log; empty once setup is done
-	touched  map[string]time.Time // key id -> last time its use was written
+	mu         sync.Mutex
+	alertErr   string // the last alert that could not be sent
+	alertErrAt time.Time
+	tokenBad   *dns.Problem         // the last daily token check, when it failed
+	tokenAt    time.Time            // when tokenBad was found
+	setupTok   string               // one-time token from the log; empty once setup is done
+	touched    map[string]time.Time // key id -> last time its use was written
 	// pairCodes are one-time codes (Connected apps, "Connect a fjord…")
 	// with their expiry: a fjord elsewhere redeems one for a key.
 	pairCodes map[string]time.Time
@@ -111,6 +116,8 @@ func New(version string, caddy Runner, mgr *app.Manager, setupToken, secrets str
 	// over the socket, or a connected app's key.
 	s.mux.HandleFunc("GET /api/v1/hosts", s.requireAuth(s.listHosts))
 	s.mux.HandleFunc("GET /api/v1/hosts/health", s.requireAuth(s.hostsHealth))
+	s.mux.HandleFunc("GET /api/v1/hosts/uptime", s.requireAuth(s.hostsUptime))
+	s.mux.HandleFunc("GET /api/v1/hosts/{id}/uptime", s.requireAuth(s.hostUptime))
 	s.mux.HandleFunc("POST /api/v1/hosts", s.requireAuth(s.createHost))
 	s.mux.HandleFunc("GET /api/v1/hosts/{id}", s.requireAuth(s.getHost))
 	s.mux.HandleFunc("PUT /api/v1/hosts/{id}", s.requireAuth(s.updateHost))
@@ -132,6 +139,10 @@ func New(version string, caddy Runner, mgr *app.Manager, setupToken, secrets str
 	s.mux.HandleFunc("GET /api/v1/sources/fjord", s.requireAdmin(s.getFjordSource))
 	s.mux.HandleFunc("PUT /api/v1/sources/fjord", s.requireAdmin(s.putFjordSource))
 	s.mux.HandleFunc("GET /api/v1/sources/fjord/services", s.requireAdmin(s.fjordServices))
+	s.mux.HandleFunc("GET /api/v1/alerts", s.requireAdmin(s.getAlerts))
+	s.mux.HandleFunc("PUT /api/v1/alerts", s.requireAdmin(s.putAlerts))
+	s.mux.HandleFunc("POST /api/v1/alerts/test", s.requireAdmin(s.testAlert))
+	s.mux.HandleFunc("PUT /api/v1/uptime/enabled", s.requireAdmin(s.putUptimeEnabled))
 	s.mux.HandleFunc("PUT /api/v1/password", s.requireAdmin(s.changePassword))
 	s.mux.HandleFunc("POST /api/v1/backup", s.requireAdmin(s.createBackup))
 	s.mux.HandleFunc("GET /api/v1/tokens", s.requireAdmin(s.listTokens))

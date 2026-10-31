@@ -63,6 +63,7 @@ export type Host = {
   ref?: string
   ownOrigin?: boolean
   icon?: string // "<hash>.<kind>": the app that made the name sent one
+  unwatched?: boolean // not checked for uptime, no alerts
   createdAt: string
   deletedAt?: string
   names: string[]
@@ -90,3 +91,10 @@ export type CertStatus = { state: 'manual' | 'trial' | 'issuing' | 'ok' | 'faile
 export type Certificates = { domain: string; mode: string; providers: Provider[]; provider?: string; status: CertStatus }
 export type ProviderGuess = { zone: string; nameservers: string[]; provider?: string }
 export type DnsCheck = { name: string; addresses: string[]; proxyAddresses?: string[]; notFound?: boolean; error?: string; short?: { name: string; addresses: string[]; notFound?: boolean } }
+/** [hour start (unix s), checks, answered, sum of answered connect ms] */
+export type Hour = [number, number, number, number]
+/** down after two failed checks in a row; never: not once reached since it was added */
+export type Uptime = { state: 'up' | 'down' | 'unknown'; since?: string; never?: boolean; day: number | null; week: number | null; month: number | null; avgMs?: number; hours: Hour[]; from?: string }
+export type Outage = { start: string; end?: string }
+export type UptimeDetail = Uptime & { outages: Outage[] }
+export type Alerts = { enabled: boolean; kind: '' | 'ntfy' | 'webhook'; to: string; lastError?: string; lastErrorAt?: string }

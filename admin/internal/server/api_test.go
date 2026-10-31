@@ -35,7 +35,7 @@ func TestKeyScope(t *testing.T) {
 	api := &client{t: t, s: s, bearer: key}
 	allowed := []struct{ method, path string }{
 		{"GET", "/api/v1/status"}, {"GET", "/api/v1/hosts"}, {"GET", "/api/v1/hosts/health"},
-		{"GET", "/api/v1/probe?address=127.0.0.1&port=1"},
+		{"GET", "/api/v1/hosts/uptime"}, {"GET", "/api/v1/probe?address=127.0.0.1&port=1"},
 	}
 	for _, a := range allowed {
 		if rr, out := api.do(a.method, a.path, ""); rr.Code != 200 {
@@ -47,7 +47,8 @@ func TestKeyScope(t *testing.T) {
 		{"GET", "/api/v1/certificates", ""}, {"GET", "/api/v1/tokens", ""},
 		{"POST", "/api/v1/tokens", `{"label":"more"}`}, {"PUT", "/api/v1/password", `{"current":"a","password":"b"}`},
 		{"POST", "/api/v1/backup", `{"passphrase":"12345678"}`}, {"GET", "/api/v1/dns-check", ""},
-		{"GET", "/api/v1/sources/fjord", ""},
+		{"GET", "/api/v1/sources/fjord", ""}, {"GET", "/api/v1/alerts", ""},
+		{"PUT", "/api/v1/alerts", `{"kind":"ntfy","url":"https://ntfy.example/t"}`}, {"POST", "/api/v1/alerts/test", `{}`}, {"PUT", "/api/v1/uptime/enabled", `{"enabled":false}`},
 	}
 	for _, d := range denied {
 		if rr, _ := api.do(d.method, d.path, d.body); rr.Code != 403 {

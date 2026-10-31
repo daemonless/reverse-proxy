@@ -51,6 +51,17 @@ type Settings struct {
 	// on, for a container on several that reaches apps on all of them;
 	// none answers on every network.
 	Listen []string `json:"answerOn,omitempty"`
+	// Alerts is where a message goes when a name stops responding and
+	// when it is back; nil sends none.
+	Alerts *Alerts `json:"alerts,omitempty"`
+	// UptimeOff stops the uptime checks (and so the alerts) for every name.
+	UptimeOff bool `json:"uptimeOff,omitempty"`
+}
+
+// Alerts is one place to send down and back messages.
+type Alerts struct {
+	Kind string `json:"kind"` // "ntfy" or "webhook"
+	URL  string `json:"url"`
 }
 
 // DefaultShortLinks is the short-link name when none was chosen.
@@ -110,7 +121,9 @@ type Host struct {
 	OwnOrigin bool `json:"ownOrigin,omitempty"`
 	// Icon is "<hash>.<kind>" of the app's icon (server/icons.go); set by
 	// its own call, never by an edit of the host.
-	Icon      string     `json:"icon,omitempty"`
+	Icon string `json:"icon,omitempty"`
+	// Unwatched: not checked for uptime, no alerts. Watched by default.
+	Unwatched bool       `json:"unwatched,omitempty"`
 	CreatedAt time.Time  `json:"createdAt"`
 	DeletedAt *time.Time `json:"deletedAt,omitempty"` // soft delete; Undo clears it
 }
@@ -253,6 +266,10 @@ func (st *State) Clone() *State {
 	if st.Settings.Sources.Fjord != nil {
 		f := *st.Settings.Sources.Fjord
 		c.Settings.Sources.Fjord = &f
+	}
+	if st.Settings.Alerts != nil {
+		a := *st.Settings.Alerts
+		c.Settings.Alerts = &a
 	}
 	if st.Settings.Certificates != nil {
 		cc := *st.Settings.Certificates

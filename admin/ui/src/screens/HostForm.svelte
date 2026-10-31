@@ -3,6 +3,7 @@
   import { get, post, put, del, ApiError, type Host, type Health, type Settings } from '../lib/api'
   import { link, navigate } from '../lib/router.svelte'
   import { toast } from '../lib/toast.svelte'
+  import UptimeCard from '../components/UptimeCard.svelte'
 
   let { id }: { id: string } = $props()
   const editing = $derived(id !== '')
@@ -23,12 +24,15 @@
   let acceptUntrusted = $state(false)
   let trustedNetworks = $state('')
   let ownOrigin = $state(false)
+  let watch = $state(true)
   let error = $state('')
   let errorField = $state('')
   let busy = $state(false)
   let loaded = $state(false)
   let advancedOpen = $state(false)
   let ref = $state('')
+  // The target as saved: the history is of it, not of what is being typed.
+  let savedTarget = $state<{ address: string; port: number } | null>(null)
 
   type Where = { address: string; port: number; https: boolean | null }
   const isIP = (h: string) => /^[0-9.]+$/.test(h) || h.includes(':')
@@ -71,7 +75,9 @@
       access = h.access; https = h.target.https; acceptUntrusted = h.target.acceptUntrusted
       trustedNetworks = (h.trustedNetworks ?? []).join(', ')
       ownOrigin = !!h.ownOrigin
+      watch = !h.unwatched
       ref = h.ref ?? ''
+      savedTarget = { address: h.target.address, port: h.target.port }
       advancedOpen = https || !!h.extraNames?.length || !!h.trustedNetworks?.length || !!h.ownOrigin
       loaded = true
       runProbe()
@@ -116,7 +122,7 @@
     const body = {
       name, extraNames: list(extraNames),
       target: { address: address.trim(), port: Number(port), https, acceptUntrusted },
-      access, trustedNetworks: list(trustedNetworks), ref, ownOrigin,
+      access, trustedNetworks: list(trustedNetworks), ref, ownOrigin, watch,
     }
     try {
       if (editing) await put(`/api/v1/hosts/${id}`, body)
@@ -148,6 +154,7 @@
 
 {#if loaded}
 <form id="hostform" onsubmit={save} class="max-w-[640px] box-border px-5 md:px-8 py-6 flex flex-col gap-6">
+  {#if editing && savedTarget}<UptimeCard {id} address={savedTarget.address} port={savedTarget.port} bind:watch />{/if}
   <div class="card p-7 flex flex-col gap-6">
     <div>
       <div class="flex items-center justify-between gap-3 mb-2">
@@ -209,6 +216,12 @@
         <label class="flex items-start gap-3 cursor-pointer ml-8">
           <input type="checkbox" bind:checked={acceptUntrusted} class="w-5.5 h-5.5 mt-0.5 accent-[color:var(--accent)]" />
           <span class="flex flex-col"><span class="text-sm">Accept its own certificate</span><span class="hint">Needed for things like UniFi or Proxmox that sign their own.</span></span>
+        </label>
+      {/if}
+      {#if !editing}
+        <label class="flex items-start gap-3 cursor-pointer">
+          <input type="checkbox" bind:checked={watch} class="w-5.5 h-5.5 mt-0.5 accent-[color:var(--accent)]" />
+          <span class="flex flex-col"><span class="text-sm">Check that it's up</span><span class="hint">Once a minute, with its uptime on the Names page and an alert when it stops answering.</span></span>
         </label>
       {/if}
       <label class="flex items-start gap-3 cursor-pointer">

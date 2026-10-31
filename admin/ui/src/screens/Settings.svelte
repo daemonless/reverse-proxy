@@ -10,6 +10,7 @@
   import CertProvider from '../components/CertProvider.svelte'
   import NetworkChoice, { netName } from '../components/NetworkChoice.svelte'
   import PasswordStrength from '../components/PasswordStrength.svelte'
+  import AlertSettings from '../components/AlertSettings.svelte'
   import { strength } from '../lib/password'
   import { credits, ourLicense, buildTools } from '../lib/credits'
 
@@ -398,6 +399,8 @@
   </section>
 
   {:else}
+  <AlertSettings />
+
   <section class="flex flex-col gap-2.5">
     <h3 class="m-0 text-sm text-muted font-semibold">Password</h3>
     <div class="card px-6 py-4.5 flex flex-col gap-4">
