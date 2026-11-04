@@ -167,11 +167,25 @@ x-daemonless:
       RP_ADMIN_URL: "Where you open the admin UI, e.g. https://192.168.1.5:8443. Optional: the proxy remembers the address you sign in at; this makes the first-run link exact before anyone has."
       RP_TRUST_PORT: "Host port that reaches the HTTP trust page if you publish it on something other than 80. Optional."
       RP_DEBUG: "Set to 1 for Caddy's full info-level log. Off by default so the log stays readable."
-      RP_PAIRING_KEY: "Admin only. A key (32+ random characters) an app that installed the proxy, such as fjord, uses to manage hosts; registered once as a connected app"
-      RP_PAIRING_NAME: "Admin only. The connected app's name for RP_PAIRING_KEY. Default: Paired app"
-      RP_SETUP_TOKEN: "Admin only. First-run setup token chosen by the installing app, so it can open setup for you. Default: a new one in the log"
-      RP_PAIRING_URL: "Admin only. Where the installing app is opened, shown as a way back to it. Optional."
-      RP_PAIRING_ID: "Admin only. The installing app's permanent id, so several of them are told apart. Optional."
+      # The key and token stay required: fjord only makes up required secrets.
+      RP_PAIRING_KEY:
+        desc: "Admin only. A key (32+ random characters) an app that installed the proxy, such as fjord, uses to manage hosts; registered once as a connected app"
+        level: advanced
+      RP_PAIRING_NAME:
+        desc: "Admin only. The connected app's name for RP_PAIRING_KEY. Default: Paired app"
+        optional: true
+        level: advanced
+      RP_SETUP_TOKEN:
+        desc: "Admin only. First-run setup token chosen by the installing app, so it can open setup for you. Default: a new one in the log"
+        level: advanced
+      RP_PAIRING_URL:
+        desc: "Admin only. Where the installing app is opened, shown as a way back to it. Optional."
+        optional: true
+        level: advanced
+      RP_PAIRING_ID:
+        desc: "Admin only. The installing app's permanent id, so several of them are told apart. Optional."
+        optional: true
+        level: advanced
     volumes:
       /config: "Admin state and secrets"
       /data: "Certificates, ACME account and the internal CA"
