@@ -1,11 +1,11 @@
 {
-  "generated": "2026-11-04T08:32:23Z",
+  "generated": "2026-11-04T13:56:15Z",
   "image": "reverse-proxy",
   "tags": {
     "latest-amd64": {
       "app_version": "0.2.0",
       "arch": "amd64",
-      "generated": "2026-11-04T08:31:45Z",
+      "generated": "2026-11-04T13:55:31Z",
       "packages": {
         "dotnet": [],
         "freebsd": [
