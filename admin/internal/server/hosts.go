@@ -24,7 +24,7 @@ type hostInput struct {
 	TrustedNetworks []string     `json:"trustedNetworks"`
 	Ref             string       `json:"ref"`
 	// OwnOrigin is kept as it was when absent: a client that predates it
-	// (fjord's port follow PUTs the host back) must not switch it off.
+	// (an app that PUTs the host back to follow a port) must not switch it off.
 	OwnOrigin *bool `json:"ownOrigin,omitempty"`
 	// Watch is kept as it was when absent, for the same reason.
 	Watch *bool `json:"watch,omitempty"`
@@ -133,6 +133,7 @@ func (s *Server) createHost(w http.ResponseWriter, r *http.Request) {
 	}
 	h := state.Host{ID: newID(), CreatedAt: time.Now().UTC()}
 	in.apply(&h)
+	h.By, _ = s.callerToken(r)
 	var existing *state.Host
 	err := s.mgr.Apply(func(st *state.State) error {
 		if st.Settings.Domain == "" {

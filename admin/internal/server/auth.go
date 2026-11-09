@@ -79,8 +79,8 @@ func (s *Server) tokenValid(tok string) (string, bool) {
 	return "", false
 }
 
-// touchInterval is how often a key's last use is written: fjord calls every
-// minute, and the state file need not follow each call.
+// touchInterval is how often a key's last use is written: an app may call
+// every minute, and the state file need not follow each call.
 const touchInterval = 5 * time.Minute
 
 // touchToken records that key id was used now, at most once per
@@ -465,34 +465,34 @@ func (s *Server) listTokens(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"tokens": out})
 }
 
-// namesFrom counts the live hosts each connected app made, by token id. A
-// fjord's refs are fjord:<its id>:<stack>; the installer also gets every
-// fjord ref no id claims (fjord:<host>:<stack>, made before ids existed).
+// namesFrom counts the live hosts each connected app made, by token id: by
+// the app's id in the ref (<app>:<id>:<thing>), which outlives a relink to
+// a new key; else by the key that made it; else, for a fjord ref from
+// before ids (fjord:<host>:<stack>), the installer's.
 func namesFrom(st *state.State) map[string]int {
 	out := map[string]int{}
-	claimed := map[string]string{} // ref prefix -> token id
+	byClient := map[string]string{} // app id -> token id
+	live := map[string]bool{}
+	installer := ""
 	for _, t := range st.Tokens {
 		if t.ClientID != "" {
-			claimed["fjord:"+t.ClientID+":"] = t.ID
+			byClient[t.ClientID] = t.ID
 		}
+		if t.Paired {
+			installer = t.ID
+		}
+		live[t.ID] = true
 	}
 	for _, h := range st.Live() {
-		if !strings.HasPrefix(h.Ref, "fjord:") {
-			continue
-		}
 		owner := ""
-		for prefix, id := range claimed {
-			if strings.HasPrefix(h.Ref, prefix) {
-				owner = id
-			}
+		if parts := strings.SplitN(h.Ref, ":", 3); len(parts) == 3 {
+			owner = byClient[parts[1]]
 		}
-		if owner == "" {
-			// fjord:<host>:<stack>, from before ids: the installer's.
-			for _, t := range st.Tokens {
-				if t.Paired {
-					owner = t.ID
-				}
-			}
+		if owner == "" && live[h.By] {
+			owner = h.By
+		}
+		if owner == "" && strings.HasPrefix(h.Ref, "fjord:") {
+			owner = installer
 		}
 		if owner != "" {
 			out[owner]++

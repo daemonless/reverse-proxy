@@ -21,16 +21,16 @@
   let netError = $state('')
   let current = $state(''); let next = $state(''); let nextAgain = $state(''); let weakOk = $state(''); let pwError = $state(''); let pwBusy = $state(false); let editPassword = $state(false)
   let appLabel = $state(''); let freshToken = $state(''); let freshLabel = $state(''); let appError = $state('')
-  // Linking a fjord elsewhere: one link to paste there, good for ten
-  // minutes, once. The fjord redeems it for a key of its own.
+  // Linking an app: one link to paste there, good for ten minutes, once.
+  // The app redeems it for a key of its own.
   let pairLink = $state(''); let pairBusy = $state(false)
-  async function connectFjord() {
+  async function linkApp() {
     pairBusy = true; appError = ''; freshToken = ''
     try { pairLink = (await post<{ link: string }>('/api/v1/pair/code', {})).link }
     catch (err) { appError = err instanceof ApiError ? err.message : 'Something went wrong' }
     finally { pairBusy = false }
   }
-  async function copyPairLink() { toast((await copyText(pairLink)) ? 'Copied. Paste it into fjord, Settings, Names.' : 'Select the link and copy it by hand') }
+  async function copyPairLink() { toast((await copyText(pairLink)) ? 'Copied. Paste it into the app you are linking.' : 'Select the link and copy it by hand') }
   let aboutDialog = $state<HTMLDialogElement | null>(null)
   let trust = $state<TrustInfo | null>(null)
   function loadTrust() { get<TrustInfo>('/api/v1/trust').then((t) => { trust = t }).catch(() => {}) }
@@ -192,12 +192,12 @@
       tokens = (await get<{ tokens: Token[] }>('/api/v1/tokens')).tokens
     } catch (err) { appError = err instanceof ApiError ? err.message : 'Something went wrong' }
   }
-  // The app that installed this proxy (fjord) pairs with it up front; it is
+  // The app that installed this proxy (fjord, say) pairs with it up front; it is
   // shown as a connected service, not as one more key.
   let paired = $derived(tokens.find((t) => t.paired))
   let keys = $derived(tokens.filter((t) => !t.paired))
   // How many names each app made comes with the token list (the proxy
-  // counts by the app's id in the refs).
+  // counts by the app's id in the refs, else by the key that made them).
   const namesFrom = (t: Token) => t.names ?? 0
   let fromPaired = $derived(paired ? namesFrom(paired) : 0)
   const came = (n: number) => (n === 0 ? 'no names from it yet' : n === 1 ? '1 name comes from it' : `${n} names come from it`)
@@ -436,10 +436,10 @@
   <section class="flex flex-col gap-2.5">
     <h3 class="m-0 text-sm text-muted font-semibold">Connected apps</h3>
     <div class="card px-6 py-5 flex flex-col gap-4">
-      <!-- One direction: apps push names here with a key. fjord's key comes
-           with the install; anything else gets one below. The proxy never
-           reaches out to an app. -->
-      <div class="hint text-sm">An app with a key adds, changes and removes names here, and nothing else. fjord connects by itself when it installs this proxy. <a class="text-accent" href="/api/v1/openapi.json" target="_blank" rel="noopener">API reference</a></div>
+      <!-- One direction: apps push names here with a key. An installer's key
+           comes with the install; anything else links or gets one below.
+           The proxy never reaches out to an app. -->
+      <div class="hint text-sm">An app with a key adds, changes and removes names here, and nothing else. An app that installs this proxy, like fjord, connects by itself. <a class="text-accent" href="/api/v1/openapi.json" target="_blank" rel="noopener">API reference</a></div>
       {#if paired || keys.length}
         <ul class="m-0 p-0 list-none flex flex-col divide-y divide-[color:var(--border)]">
           {#if paired}
@@ -464,11 +464,12 @@
             <li class="flex items-center justify-between gap-4 py-3">
               <span class="flex flex-col min-w-0 flex-1">
                 <!-- Connected once something has called with the key; until
-                     then only made. A fjord linked by code has an id and an
-                     address; a plain key has neither. -->
+                     then only made. An app linked by code has an id and an
+                     address; a plain key has neither, but its names still
+                     count. -->
                 {#if t.lastUsedAt}
                   <span class="text-sm flex items-center gap-2">{t.label}<span class="flex items-center gap-1.5 text-sm text-success-soft-fg"><span class="w-2 h-2 rounded-full bg-[color:var(--success)]"></span>Connected</span></span>
-                  <span class="hint">{#if t.clientId}Linked by code; {came(namesFrom(t))}.{:else}By key, last used {new Date(t.lastUsedAt).toLocaleDateString()}.{/if}{#if t.url}&nbsp;·&nbsp;<a class="text-accent" href={t.url}>Open {t.label}</a>{/if}</span>
+                  <span class="hint">{#if t.clientId}Linked by code; {came(namesFrom(t))}.{:else}By key{namesFrom(t) ? `; ${came(namesFrom(t))}` : ''}, last used {new Date(t.lastUsedAt).toLocaleDateString()}.{/if}{#if t.url}&nbsp;·&nbsp;<a class="text-accent" href={t.url}>Open {t.label}</a>{/if}</span>
                 {:else}
                   <span class="text-sm flex items-center gap-2">{t.label}<span class="flex items-center gap-1.5 text-sm text-muted"><span class="w-2 h-2 rounded-full border-2 border-[color:var(--muted)] box-border"></span>Not used yet</span></span>
                   <span class="hint">{#if t.clientId}Linked by code; it has not called yet.{:else}A key was made for it; nothing has called with it so far.{/if}</span>
@@ -490,8 +491,8 @@
       {/if}
       {#if pairLink}
         <div class="rounded-lg p-4 bg-accent-soft text-accent-soft-fg flex flex-col gap-2">
-          <div class="font-semibold">For another fjord, on another machine.</div>
-          <div class="text-sm">Open that fjord's Settings, Names tab, paste this link into its Reverse proxy box and press Link. Works once, within ten minutes.</div>
+          <div class="font-semibold">For the app you are linking.</div>
+          <div class="text-sm">Paste this link where the app asks for a reverse proxy (in fjord: Settings, Names, the Reverse proxy box) and press Link. Works once, within ten minutes.</div>
           <code class="font-mono break-all select-all text-sm bg-inset text-fg rounded p-2">{pairLink}</code>
           <div class="flex justify-end gap-2">
             <button type="button" class="btn-plain min-h-10" onclick={() => (pairLink = '')}>Done</button>
@@ -500,8 +501,8 @@
         </div>
       {/if}
       <div class="flex gap-2 flex-wrap items-center">
-        <button type="button" class="btn-soft" onclick={connectFjord} disabled={pairBusy}>Connect a fjord…</button>
-        <span class="hint">Another fjord, on another machine, so its apps get names here too. For a script or anything else, make a key:</span>
+        <button type="button" class="btn-soft" onclick={linkApp} disabled={pairBusy}>Link an app…</button>
+        <span class="hint">An app that can link, like fjord on another machine, so its apps get names here too. For a script or anything else, make a key:</span>
       </div>
       <form onsubmit={addApp} class="flex gap-2 flex-wrap">
         <input class="input flex-1 basis-56 min-w-0" bind:value={appLabel} placeholder="What the key is for" autocomplete="off" aria-label="Key label" />

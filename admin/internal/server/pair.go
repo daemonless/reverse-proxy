@@ -11,12 +11,12 @@ import (
 	"github.com/daemonless/reverse-proxy/admin/internal/state"
 )
 
-// pairCodeLife is how long a code from "Connect a fjord…" stays good.
+// pairCodeLife is how long a code from "Link an app…" stays good.
 const pairCodeLife = 10 * time.Minute
 
 // newPairCode is POST /api/v1/pair/code: a one-time code and the link that
 // carries it (https://proxy.<ending>/link#code=…), for the person to paste
-// into the other fjord. Ten minutes, once.
+// into the app that links. Ten minutes, once.
 func (s *Server) newPairCode(w http.ResponseWriter, r *http.Request) {
 	code := auth.NewSetupToken()
 	now := time.Now()
@@ -32,7 +32,7 @@ func (s *Server) newPairCode(w http.ResponseWriter, r *http.Request) {
 	s.pairCodes[code] = now.Add(pairCodeLife)
 	s.mu.Unlock()
 	// The link names this proxy the way the admin reached it (an address,
-	// or the name): the other fjord may not resolve proxy.<ending> yet, and
+	// or the name): the app may not resolve proxy.<ending> yet, and
 	// an address it can always reach. The proxy's own name comes back when
 	// the code is redeemed, for the pin.
 	writeJSON(w, http.StatusCreated, map[string]any{
@@ -42,8 +42,8 @@ func (s *Server) newPairCode(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// pair is POST /api/v1/pair {code, client:{id,name,url}}: the other fjord
-// redeems a code for a key of its own, and learns what it needs to trust
+// pair is POST /api/v1/pair {code, client:{id,name,url}}: an app (fjord,
+// Sylve, anything with the code) redeems a code for a key of its own, and learns what it needs to trust
 // this proxy. The code proves the person had the admin page open a moment
 // ago; a wrong one counts against the caller like a wrong password.
 func (s *Server) pair(w http.ResponseWriter, r *http.Request) {
@@ -77,7 +77,7 @@ func (s *Server) pair(w http.ResponseWriter, r *http.Request) {
 	s.limiter.Succeed(clientAddr(r))
 	name := strings.TrimSpace(in.Client.Name)
 	if name == "" || len(name) > 64 {
-		name = "fjord"
+		name = "Linked app"
 	}
 	id := newID()
 	secret := auth.NewSecret(32)

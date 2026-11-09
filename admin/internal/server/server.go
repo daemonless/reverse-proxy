@@ -76,8 +76,8 @@ type Server struct {
 	tokenAt    time.Time            // when tokenBad was found
 	setupTok   string               // one-time token from the log; empty once setup is done
 	touched    map[string]time.Time // key id -> last time its use was written
-	// pairCodes are one-time codes (Connected apps, "Connect a fjord…")
-	// with their expiry: a fjord elsewhere redeems one for a key.
+	// pairCodes are one-time codes (Connected apps, "Link an app…") with
+	// their expiry: an app elsewhere redeems one for a key.
 	pairCodes map[string]time.Time
 }
 
@@ -93,8 +93,8 @@ func New(version string, caddy Runner, mgr *app.Manager, setupToken, secrets str
 	s.mux.HandleFunc("POST /api/v1/setup/token", s.setupToken)
 	s.mux.HandleFunc("POST /api/v1/setup/password", s.setupPassword)
 	s.mux.HandleFunc("POST /api/v1/login", s.login)
-	// Linking a fjord elsewhere: the admin mints a code, the fjord redeems
-	// it for a key. Public like login, and limited like it.
+	// Linking an app: the admin mints a code, the app redeems it for a
+	// key. Public like login, and limited like it.
 	s.mux.HandleFunc("POST /api/v1/pair/code", s.requireAdmin(s.newPairCode))
 	s.mux.HandleFunc("POST /api/v1/pair", s.pair)
 	s.mux.HandleFunc("PUT /api/v1/me", s.requireAuth(s.me))

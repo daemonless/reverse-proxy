@@ -178,10 +178,10 @@
         <Trust />
       {:else if screen === 'link'}
         <!-- Someone opened the pairing link in a browser instead of pasting it
-             into fjord: say where it goes. -->
+             into the app: say where it goes. -->
         <div class="max-w-[640px] mx-auto box-border px-4 py-12 flex flex-col gap-4">
-          <h1 class="m-0 text-2xl font-bold text-fg leading-tight">This link is for fjord</h1>
-          <p class="m-0 text-sm leading-snug">Paste it into the other fjord under Settings, Names, in the Reverse proxy box. It lets that fjord give its apps names here. It works for ten minutes, once.</p>
+          <h1 class="m-0 text-2xl font-bold text-fg leading-tight">This link is for an app</h1>
+          <p class="m-0 text-sm leading-snug">Paste it into the app you are linking, where it asks for a reverse proxy (in fjord: Settings, Names, the Reverse proxy box). It lets that app give names here. It works for ten minutes, once.</p>
           <code class="font-mono break-all select-all text-sm bg-inset text-fg rounded p-3">{location.href}</code>
         </div>
       {/if}

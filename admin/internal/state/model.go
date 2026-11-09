@@ -108,9 +108,14 @@ type Host struct {
 	ExtraNames []string `json:"extraNames,omitempty"` // more labels for the same service
 	Target     Target   `json:"target"`
 	Access     Access   `json:"access"`
-	// Ref says where a host came from ("fjord:<host>:<stack>"), so a
-	// source can show "already added". Empty for hand-made hosts.
+	// Ref says where a host came from ("<app>:<app's id>:<thing>", fjord's
+	// "fjord:<id>:<stack>"), so the app that made it finds it again. Empty
+	// for hand-made hosts.
 	Ref string `json:"ref,omitempty"`
+	// By is the id of the key that made the host, so Connected apps can
+	// count an app's names whatever its refs look like. Empty when made by
+	// hand.
+	By string `json:"by,omitempty"`
 	// TrustedNetworks overrides Settings.TrustedNetworks for this host when set.
 	TrustedNetworks []string `json:"trustedNetworks,omitempty"`
 	// OwnOrigin: the app expects requests from its own address (UniFi

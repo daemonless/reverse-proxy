@@ -134,6 +134,28 @@ func TestNamesFromCountsByClientID(t *testing.T) {
 	}
 }
 
+// Any app's names count, not only fjord's: by its id in the ref whatever
+// the ref's first part, and by the key that made the name for an app that
+// never said an id.
+func TestNamesFromCountsAnyApp(t *testing.T) {
+	st := &state.State{}
+	st.Tokens = []state.ApiToken{
+		{ID: "sylve", Label: "Sylve on nas", ClientID: "b7e2"},
+		{ID: "script", Label: "my script"},
+	}
+	st.Hosts = []state.Host{
+		{ID: "1", Name: "jellyfin", Ref: "sylve:b7e2:jail-104"},
+		{ID: "2", Name: "home-vm", Ref: "sylve:b7e2:vm-7", By: "gone"},
+		{ID: "3", Name: "printer", Ref: "printer", By: "script"},
+		{ID: "4", Name: "nas", By: "script"},
+		{ID: "5", Name: "router", By: "deleted-key"},
+	}
+	got := namesFrom(st)
+	if got["sylve"] != 2 || got["script"] != 2 || len(got) != 2 {
+		t.Fatalf("names from each app: %v", got)
+	}
+}
+
 // An app tells the proxy who it is with its key; the account cannot.
 func TestMeUpdatesTheCaller(t *testing.T) {
 	s, admin, _ := setUp(t)
@@ -193,5 +215,26 @@ func TestStatusNamesInstallerBeforeSetup(t *testing.T) {
 	s.mgr.Note(func(st *state.State) { st.Settings.AdminPasswordHash = "x" })
 	if _, out := (&client{t: t, s: s}).do("GET", "/api/v1/status", ""); out["installedBy"] != nil {
 		t.Fatalf("after setup: %v", out["installedBy"])
+	}
+}
+
+// A name made with a key counts for that app under Connected apps, whatever
+// its ref; one made by hand counts for nobody.
+func TestHostRemembersTheKeyThatMadeIt(t *testing.T) {
+	s, admin, key := setUp(t)
+	api := &client{t: t, s: s, bearer: key}
+	if rr, out := api.do("POST", "/api/v1/hosts", `{"name":"jellyfin","target":{"address":"10.0.0.5","port":8096},"ref":"sylve:b7e2:jail-104"}`); rr.Code != 201 {
+		t.Fatalf("create with a key: %d %v", rr.Code, out)
+	}
+	if rr, out := admin.do("POST", "/api/v1/hosts", `{"name":"router","target":{"address":"10.0.0.1","port":443}}`); rr.Code != 201 {
+		t.Fatalf("create by hand: %d %v", rr.Code, out)
+	}
+	_, out := admin.do("GET", "/api/v1/tokens", "")
+	toks, _ := out["tokens"].([]any)
+	if len(toks) != 1 {
+		t.Fatalf("tokens: %v", out)
+	}
+	if n := toks[0].(map[string]any)["names"]; n != float64(1) {
+		t.Fatalf("names from the key: %v, want 1", n)
 	}
 }

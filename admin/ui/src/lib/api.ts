@@ -61,6 +61,7 @@ export type Host = {
   access: 'home' | 'internet'
   trustedNetworks?: string[]
   ref?: string
+  by?: string // id of the key that made it; none when made by hand
   ownOrigin?: boolean
   icon?: string // "<hash>.<kind>": the app that made the name sent one
   unwatched?: boolean // not checked for uptime, no alerts
