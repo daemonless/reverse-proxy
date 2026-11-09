@@ -212,10 +212,9 @@
          open to the internet. Home-network-only is the default and goes
          without saying. -->
     {#snippet chips(h: Host)}
-      {#if h.ref}
-        <!-- A connected app made this host and keeps it pointed at the app;
-             its ref starts with that app's name. -->
-        <span class="chip" title="{paired.appFor(h.ref)} made this name and keeps it pointed at the app. Edit the name here; the address follows the app.">From {paired.appFor(h.ref)}</span>
+      {#if paired.appFor(h)}
+        <!-- A connected app made this host and keeps it pointed at the app. -->
+        <span class="chip" title="{paired.appFor(h)} made this name and keeps it pointed at the app. Edit the name here; the address follows the app.">From {paired.appFor(h)}</span>
       {/if}
       {#if h.access === 'internet'}
         <span class="chip bg-warning-soft text-warning-soft-fg font-semibold">Open to the internet</span>

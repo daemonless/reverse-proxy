@@ -28,7 +28,7 @@ address you use today. It is [Caddy](https://caddyserver.com) underneath, manage
 - **Short links.** Type `go/radarr` in any browser on your network. `go/` alone lists every name.
 - **Walks you through your router.** Setup says exactly which record to add, with steps for OPNsense, pfSense, UniFi, Pi-hole, AdGuard Home and others, and turns green when it works.
 - **Says what is wrong, in plain words.** A certificate that fails says why (token rejected, record never appeared, rate limit) and how to fix it. A name nobody set up shows a page saying so, at home.
-- **Works with [fjord](https://github.com/daemonless/fjord).** Installed from fjord, it pairs by itself: fjord lists your apps that have no name yet, names them in one click, and keeps each name pointing at its app when the app moves to a new address.
+- **Works with [fjord](https://github.com/daemonless/fjord), and with your app.** Installed from fjord, it pairs by itself: fjord lists your apps that have no name yet, names them in one click, and keeps each name pointing at its app when the app moves to a new address. Any other app can link the same way, through the same API.
 - **Scriptable.** A key per app or script manages names and nothing else; there is an OpenAPI reference and a command line inside the container.
 - **Easy to keep.** One encrypted backup file holds everything; restore it on a fresh install. Delete a name by mistake and Undo brings it back.
 
@@ -291,6 +291,18 @@ the two pair by themselves: fjord passes a key and a setup link, and its
 Finish setup button opens setup already verified. After that, fjord
 lists the apps that have no name yet and names the ones you pick, and
 keeps each name pointing at its app when the app's address changes.
+
+### Your own app
+
+An app that manages services, like a jail or VM manager, can do what
+fjord does. It gets a key one of three ways: the person presses "Link an
+app…" under Settings → Connected apps and pastes the link into the app,
+which redeems it at `POST /api/v1/pair`; the app installs the proxy with
+`RP_PAIRING_KEY` set; or the person makes a key by hand. Then it says who
+it is (`PUT /api/v1/me`), gives each service a name with a `ref` like
+`<app>:<its id>:<service>` so a retry never makes two, and moves the name
+when the service's address changes. Connected apps shows each app and how
+many names came from it. The steps are at the top of the API reference.
 
 ### Scripts and other apps
 

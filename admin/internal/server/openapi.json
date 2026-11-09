@@ -4,7 +4,7 @@
     "title": "Daemonless Reverse Proxy API",
     "version": "1",
     "summary": "Give services on a home network HTTPS names.",
-    "description": "The hosts API of the daemonless reverse proxy. A host is one name (radarr.apps.lan) in front of one service (an address and a port). The proxy issues the certificate and decides who may open the name.\n\nCalls are made to the admin, https://<proxy>:8443, with `Authorization: Bearer <key>`. A key is made in Settings > Connected apps, or given to the proxy at install as `RP_PAIRING_KEY`. A key manages hosts only; the proxy's own settings, certificates, backup and keys belong to the account and answer 403 to a key.\n\nThis is version 1 of the API. Fields may be added; nothing listed here is renamed or removed within version 1. `GET /api/v1/status` says which version a proxy speaks.\n\nInside the container the same calls work over the admin's unix socket without a key, which is what the `reverse-proxy hosts` command uses.",
+    "description": "The hosts API of the daemonless reverse proxy. A host is one name (radarr.apps.lan) in front of one service (an address and a port). The proxy issues the certificate and decides who may open the name.\n\nCalls are made to the admin, https://<proxy>:8443, with `Authorization: Bearer <key>`. A key is made in Settings > Connected apps, or given to the proxy at install as `RP_PAIRING_KEY`. A key manages hosts only; the proxy's own settings, certificates, backup and keys belong to the account and answer 403 to a key.\n\nThis is version 1 of the API. Fields may be added; nothing listed here is renamed or removed within version 1. `GET /api/v1/status` says which version a proxy speaks.\n\nInside the container the same calls work over the admin's unix socket without a key, which is what the `reverse-proxy hosts` command uses.\n\n## Adding your app\n\nfjord is one app that uses this API; any app that knows where its services live (a jail or VM manager, a container UI, a script) can do the same:\n\n1. **Get a key.** Either the person links your app: they press \"Link an app…\" under Connected apps and paste the link into your app, which sends the code to `POST /api/v1/pair` with its own id, name and address. Or, when your app installs the proxy, it sets `RP_PAIRING_KEY` (and `RP_PAIRING_NAME`, `RP_PAIRING_ID`, `RP_PAIRING_URL`) and the proxy takes that key on first start. A key made by hand under Connected apps works too.\n2. **Say who you are.** `PUT /api/v1/me` with your permanent id, the name to show and where your app is opened, whenever one of them changes.\n3. **Give names.** `POST /api/v1/hosts` with the name, the service's address and port, and a `ref` of the form `<app>:<your id>:<thing>` (for example `sylve:<id>:jail-104`). One host per ref: a retry gets `409` and the host already made, so a lost answer never makes two.\n4. **Follow the service.** When its address or port changes, `PUT /api/v1/hosts/{id}` with the new target; `GET /api/v1/probe` says first whether the proxy can reach it.\n5. **Optionally,** `PUT /api/v1/hosts/{id}/icon` with the service's icon, shown next to its name.",
     "license": {
       "name": "BSD-2-Clause",
       "identifier": "BSD-2-Clause"
@@ -430,7 +430,7 @@
           "trust"
         ],
         "summary": "Redeem a pairing code for a key",
-        "description": "Public, rate-limited. An app elsewhere (a fjord) sends a code the admin made under Connected apps (\"Connect a fjord…\", good for ten minutes, once) with its own id, name and address, and gets a key of its own plus what it needs to trust this proxy.",
+        "description": "Public, rate-limited. An app (fjord, or any other) sends a code the admin made under Connected apps (\"Link an app…\", good for ten minutes, once) with its own id, name and address, and gets a key of its own plus what it needs to trust this proxy.",
         "security": [
           {}
         ],
@@ -1041,8 +1041,8 @@
           },
           "ref": {
             "type": "string",
-            "description": "Opaque mark of where the host came from, e.g. `fjord:<host>:<stack>`, so a manager finds its hosts again. One host per ref.",
-            "example": "fjord:server:radarr"
+            "description": "Mark of where the host came from, so the app that made it finds it again: `<app>:<the app's id, as sent to /me>:<thing>`. The proxy counts an app's names by the id in it. One host per ref.",
+            "example": "fjord:4cc0fb41d2a0:radarr"
           },
           "ownOrigin": {
             "type": "boolean",
@@ -1090,6 +1090,10 @@
               "createdAt": {
                 "type": "string",
                 "format": "date-time"
+              },
+              "by": {
+                "type": "string",
+                "description": "Id of the key that made the host; absent when it was made by hand. Set by the proxy."
               },
               "deletedAt": {
                 "type": "string",
