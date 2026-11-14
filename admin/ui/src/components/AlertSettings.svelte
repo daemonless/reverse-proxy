@@ -1,4 +1,6 @@
 <script lang="ts">
+  import SettingRow from './SettingRow.svelte'
+  import Switch from './Switch.svelte'
   import { get, put, post, ApiError, type Alerts } from '../lib/api'
   import { toast } from '../lib/toast.svelte'
   import { focus } from '../lib/focus'
@@ -44,21 +46,21 @@
 <section class="flex flex-col gap-2.5">
   <h3 class="m-0 text-sm text-muted font-semibold">Uptime and alerts</h3>
   <div class="card overflow-hidden">
-  <div class="px-6 py-4.5 flex items-center justify-between gap-4 flex-wrap {alerts?.enabled ? 'border-b border-[color:var(--border)]' : ''}">
-    <span class="flex flex-col flex-1 basis-64 min-w-0">
-      <span class="text-sm">{alerts?.enabled === false ? 'Off. Names are not checked, and no alerts are sent.' : 'Every name is checked once a minute.'}</span>
-      <span class="hint">{alerts?.enabled === false ? 'Their history is kept for when you turn it on again.' : "Down means two checks in a row got no answer. A name's own page can turn it off for that name."}</span>
-    </span>
-    {#if alerts}<button type="button" class="btn-plain min-h-10 px-3 text-sm text-accent" disabled={busy} onclick={() => setEnabled(!alerts!.enabled)}>{alerts.enabled ? 'Turn off' : 'Turn on'}</button>{/if}
+  <div class={alerts?.enabled ? 'border-b border-[color:var(--border)]' : ''}>
+    <SettingRow title="Check every name">
+      {alerts?.enabled === false ? 'Off. Names are not checked, and no alerts are sent. Their history is kept.' : "Once a minute. Down means two checks in a row got no answer. A name's own page can turn it off for that name."}
+      {#snippet control()}{#if alerts}<Switch checked={alerts.enabled} disabled={busy} label="Check every name" onchange={(on) => setEnabled(on)} />{/if}{/snippet}
+    </SettingRow>
   </div>
   {#if alerts?.enabled}
-  <div class="px-6 py-5 flex flex-col gap-4">
+  <div class="px-6 py-4 flex flex-col gap-4">
     <div class="flex items-center justify-between gap-4 flex-wrap">
-      <span class="flex flex-col flex-1 basis-64 min-w-0">
+      <span class="flex flex-col gap-0.5 flex-1 basis-64 min-w-0">
+        <span class="text-sm font-semibold text-fg">Alerts</span>
         {#if alerts?.kind}
-          <span class="text-sm">When a name stops responding, and again when it's back, a message goes to <strong class="break-words">{alerts.kind === 'ntfy' ? 'ntfy' : 'your webhook'} at {alerts.to}</strong>.</span>
+          <span class="hint">When a name stops responding, and again when it's back, a message goes to <strong class="break-words">{alerts.kind === 'ntfy' ? 'ntfy' : 'your webhook'} at {alerts.to}</strong>.</span>
         {:else}
-          <span class="text-sm">Off. Get a message on your phone when a name stops responding, and again when it's back.</span>
+          <span class="hint">Off. Get a message on your phone when a name stops responding, and again when it's back.</span>
         {/if}
       </span>
       {#if !edit}

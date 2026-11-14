@@ -111,6 +111,41 @@ x-daemonless:
     lists the apps that have no name yet and names the ones you pick, and
     keeps each name pointing at its app when the app's address changes.
 
+    ### Names from container labels
+
+    A container on the same machine can ask for its name with labels, the
+    way Traefik users expect, without fjord or a key. Turn it on by giving
+    the proxy podman's socket: the `RP_PODMAN_DIR` line under `volumes`
+    mounts the host's `/var/run/podman` (the directory, so the socket
+    survives a `podman_service` restart). In fjord it is the "Name
+    containers by their labels" switch. The proxy's root unit reads the
+    socket; the web UI never does. `:ro` does not limit a socket: whoever
+    holds it can run podman, so it goes only to a proxy you trust with that.
+    Settings can turn names from labels off while the socket is mounted.
+
+    | Label | Means |
+    |---|---|
+    | `io.daemonless.proxy=true` | Name it after the container (`radarr` becomes `radarr.<your ending>`). Enough for a daemonless image: the port is the image's own. |
+    | `io.daemonless.proxy.name=movies` | A different name. |
+    | `io.daemonless.proxy.port=7878` | The port, when the image declares none or several. |
+    | `io.daemonless.proxy.names=films,cinema` | More names for the same container. |
+    | `io.daemonless.proxy.public=true` | Open it to the internet (with a public ending). |
+    | `io.daemonless.proxy.https=true` | The container itself speaks HTTPS; its own certificate is accepted. |
+    | `io.daemonless.proxy.own-origin=true` | The service expects its own address in Origin and Referer (UniFi). |
+
+    The proxy reaches the container on a network they share (the default
+    `podman` bridge: no port needs publishing), else through a published
+    port on the host, and says which on the Names page. The labels own the
+    name, port and access, shown read-only; trusted networks, own address,
+    the icon and the uptime check are edited in the proxy and survive a
+    `podman-compose up`. A stopped container keeps its name and shows as
+    down; a removed one loses it, restorably for a day; a recreated one
+    (new address, or a new name in its labels) is followed. A label the
+    proxy cannot honor, a name another container or a hand-made name
+    already has, or a container it cannot reach is listed on the Names
+    page with the reason, never guessed at. Settings → Connected apps shows
+    whether podman is being read.
+
     ### Your own app
 
     An app that manages services, like a jail or VM manager, can do what
@@ -171,6 +206,18 @@ x-daemonless:
       client_url: ${RP_PAIRING_URL}
       client_id: ${RP_PAIRING_ID}
       client_name: ${RP_PAIRING_NAME}
+  choices:
+    container_labels:
+      label: Names from container labels
+      doc: Containers on this machine with io.daemonless.proxy labels get names here. The proxy reads podman's socket; the web UI never does.
+      default: "off"
+      options:
+        "off":
+          label: "Off"
+        "on":
+          label: "On: the proxy reads podman's socket"
+          env: { RP_PODMAN_DIR: /var/run/podman }
+
   docs:
     env:
       PUID: "User ID for the admin process (Caddy stays root to bind 80 and 443)"
@@ -213,6 +260,10 @@ services:
     # "always", not "unless-stopped": FreeBSD's podman rc.d only auto-starts
     # containers with restart-policy=always at boot (needs podman_enable=YES).
     restart: always
+    # SELinux (Fedora, RHEL): lets the proxy use its folders and podman's
+    # socket. Ignored where there is no SELinux.
+    security_opt:
+      - label=disable
 
     environment:
       - PUID=1000
@@ -229,6 +280,9 @@ services:
     volumes:
       - /path/to/containers/reverse-proxy:/config
       - /path/to/containers/reverse-proxy/data:/data
+      # Names from container labels: point RP_PODMAN_DIR at the host's
+      # /var/run/podman (the directory). Empty directory: off.
+      - ${RP_PODMAN_DIR:-/path/to/containers/reverse-proxy/podman}:/var/run/podman:ro
 
     ports:
       - 80:80

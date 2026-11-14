@@ -65,6 +65,7 @@ export type Host = {
   ownOrigin?: boolean
   icon?: string // "<hash>.<kind>": the app that made the name sent one
   unwatched?: boolean // not checked for uptime, no alerts
+  note?: string // from the source that made it (podman-labels): a label it could not honor, how it is reached
   createdAt: string
   deletedAt?: string
   names: string[]
@@ -82,6 +83,10 @@ export type Session = { authenticated: boolean; kind: string; setupRequired: boo
 export type Status = { version: string; caddy: { running: boolean; version?: string }; setup: { complete: boolean }; domain?: string; mode?: string; hosts?: number; certificates?: string }
 export type Token = { id: string; label: string; createdAt: string; lastUsedAt?: string; paired?: boolean; disabled?: boolean; url?: string; clientId?: string; names?: number }
 export type FjordSource = { url: string; hasKey: boolean }
+/** What the podman-labels unit last saw: no socket, or N labelled containers, the ones waiting for setup and the ones it could not name. */
+export type PodmanSource = { socket: boolean; enabled: boolean; containers: number; waiting?: string[]; problems?: { container: string; message: string }[]; elsewhere?: { container: string; message: string }[]; error?: string; at?: string }
+/** The container a host came from, when a label made it. */
+export const containerOf = (h: { ref?: string }) => (h.ref?.startsWith('podman:') ? h.ref.slice('podman:'.length) : '')
 export type FjordService = { stack: string; label: string; title: string; state: string; address: string; port: number; webUI: boolean; ref: string; added?: string; addedName?: string }
 export type TrustInfo = { domain: string; mode: string; httpPort: number; needed: boolean; instance?: string; proxyName?: string; fingerprint?: string; rootUrl?: string; notAfter?: string }
 export type ProviderField = { key: string; label: string; secret: boolean; placeholder?: string; optional?: boolean }

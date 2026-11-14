@@ -113,3 +113,4 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline: non
 .hint { @apply text-xs text-muted leading-relaxed; }
 .field-error { @apply text-xs text-danger mt-1.5; }
 .chip { @apply inline-flex items-center text-xs px-2 py-0.5 rounded-full bg-chip text-chip-fg; }
+.state-pill { @apply inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full; }

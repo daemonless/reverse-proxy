@@ -92,7 +92,32 @@ const (
 
 // Sources holds the connections Add host can pick from.
 type Sources struct {
-	Fjord *FjordSource `json:"fjord,omitempty"`
+	Fjord  *FjordSource  `json:"fjord,omitempty"`
+	Podman *PodmanSource `json:"podman,omitempty"`
+	// PodmanOff turns names from container labels off while podman's
+	// socket is mounted. Set from Settings, never by the unit's report.
+	PodmanOff bool `json:"podmanOff,omitempty"`
+}
+
+// PodmanSource is what the podman-labels unit last reported: whether the
+// socket answers, the labelled containers it saw, the ones waiting for
+// setup and the ones it could not name. Written by the unit, read by the
+// UI; nothing here is edited by hand.
+type PodmanSource struct {
+	Socket     bool            `json:"socket"`
+	Containers int             `json:"containers"`
+	Waiting    []string        `json:"waiting,omitempty"`
+	Problems   []PodmanProblem `json:"problems,omitempty"`
+	// Elsewhere are labelled containers another app already names.
+	Elsewhere []PodmanProblem `json:"elsewhere,omitempty"`
+	Error     string          `json:"error,omitempty"`
+	At        time.Time       `json:"at"`
+}
+
+// PodmanProblem is a labelled container that got no name, and why.
+type PodmanProblem struct {
+	Container string `json:"container"`
+	Message   string `json:"message"`
 }
 
 // FjordSource is a fjord instance to read stacks from.
@@ -128,9 +153,17 @@ type Host struct {
 	// its own call, never by an edit of the host.
 	Icon string `json:"icon,omitempty"`
 	// Unwatched: not checked for uptime, no alerts. Watched by default.
-	Unwatched bool       `json:"unwatched,omitempty"`
+	Unwatched bool `json:"unwatched,omitempty"`
+	// Note is a line from the source that made the host (the podman-labels
+	// unit: a label it could not honor, how the target is reached). Shown
+	// on the Names page, never edited by hand.
+	Note      string     `json:"note,omitempty"`
 	CreatedAt time.Time  `json:"createdAt"`
 	DeletedAt *time.Time `json:"deletedAt,omitempty"` // soft delete; Undo clears it
+	// Held is a container-label name removed by turning container labels
+	// off: kept past the undo window, so turning them on again brings it
+	// back as it was.
+	Held bool `json:"held,omitempty"`
 }
 
 // Target is where the service is.
@@ -231,6 +264,9 @@ func (st *State) Find(id string) int {
 	return -1
 }
 
+// PodmanRefPrefix starts the ref of a name made from container labels.
+const PodmanRefPrefix = "podman:"
+
 // UndoWindow is how long a deleted host can be restored.
 const UndoWindow = 24 * time.Hour
 
@@ -251,7 +287,7 @@ func (st *State) Purge(now time.Time) {
 	kept := st.Hosts[:0]
 	for _, h := range st.Hosts {
 		if h.DeletedAt != nil {
-			if now.Sub(*h.DeletedAt) > UndoWindow {
+			if now.Sub(*h.DeletedAt) > UndoWindow && !h.Held {
 				continue
 			}
 			if h.Name != "" && (live[h.Name] || !h.DeletedAt.Equal(latest[h.Name])) {

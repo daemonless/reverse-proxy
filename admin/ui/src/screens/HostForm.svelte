@@ -1,6 +1,6 @@
 <script lang="ts">
   import { focus } from '../lib/focus'
-  import { get, post, put, del, ApiError, type Host, type Health, type Settings } from '../lib/api'
+  import { get, post, put, del, ApiError, type Host, type Health, type Settings , containerOf } from '../lib/api'
   import { link, navigate } from '../lib/router.svelte'
   import { toast } from '../lib/toast.svelte'
   import UptimeCard from '../components/UptimeCard.svelte'
@@ -60,6 +60,9 @@
     scheduleProbe()
   }
 
+  // Named by a label on a container: name, address, port and access are the
+  // labels'; the rest stays editable here.
+  let fromContainer = $state('')
   let probe = $state<Health | null>(null)
   let probing = $state(false)
   let probeTimer: number | undefined
@@ -77,6 +80,7 @@
       ownOrigin = !!h.ownOrigin
       watch = !h.unwatched
       ref = h.ref ?? ''
+      fromContainer = containerOf(h)
       savedTarget = { address: h.target.address, port: h.target.port }
       advancedOpen = https || !!h.extraNames?.length || !!h.trustedNetworks?.length || !!h.ownOrigin
       loaded = true
@@ -155,12 +159,15 @@
 {#if loaded}
 <form id="hostform" onsubmit={save} class="max-w-[640px] box-border px-5 md:px-8 py-6 flex flex-col gap-6">
   {#if editing && savedTarget}<UptimeCard {id} address={savedTarget.address} port={savedTarget.port} bind:watch />{/if}
+  {#if fromContainer}
+    <div class="rounded-lg p-4 bg-chip text-sm leading-snug">Named by the labels on container <span class="font-mono">{fromContainer}</span>. The name, address, port and who can open it come from the labels; change them there and the proxy follows. Everything below Advanced is yours.</div>
+  {/if}
   <div class="card p-7 flex flex-col gap-6">
     <div>
       <div class="flex items-center justify-between gap-3 mb-2">
         <div class="label mb-0">Where is it?</div>
       </div>
-      <input id="where" class="input" bind:value={where} oninput={onWhere} use:focus autocomplete="off" spellcheck="false" placeholder="https://router.home.lan/ui/core/dashboard  or  192.168.1.20:7878" required />
+      <input id="where" class="input" bind:value={where} oninput={onWhere} use:focus autocomplete="off" spellcheck="false" placeholder="https://router.home.lan/ui/core/dashboard  or  192.168.1.20:7878" required disabled={!!fromContainer} />
       <div class="hint mt-1.5">Paste its address as you open it today. Port and HTTPS are worked out.</div>
       {#if errorField.startsWith('target')}<div class="field-error">{error}</div>{/if}
       <div class="mt-2 text-sm flex items-center gap-2 min-h-6">
@@ -183,7 +190,7 @@
     <div>
       <label for="name" class="label">Name</label>
       <div class="flex items-center gap-2 flex-wrap">
-        <input id="name" class="input flex-1 basis-40 min-w-0" bind:value={name} oninput={() => (nameEdited = true)} autocomplete="off" spellcheck="false" placeholder="radarr" required />
+        <input id="name" class="input flex-1 basis-40 min-w-0" bind:value={name} oninput={() => (nameEdited = true)} autocomplete="off" spellcheck="false" placeholder="radarr" required disabled={!!fromContainer} />
         <span class="text-base text-muted">.{settings?.domain}</span>
       </div>
       {#if errorField === 'name'}<div class="field-error">{error}</div>{/if}
@@ -193,11 +200,11 @@
   <div class="card p-7 flex flex-col gap-4">
     <div class="label mb-0">Who can open it?</div>
     <label class="flex items-start gap-3 min-h-10 cursor-pointer">
-      <input type="radio" name="access" value="home" bind:group={access} class="w-5.5 h-5.5 mt-0.5 accent-[color:var(--accent)]" />
+      <input type="radio" name="access" value="home" bind:group={access} class="w-5.5 h-5.5 mt-0.5 accent-[color:var(--accent)]" disabled={!!fromContainer} />
       <span class="flex flex-col"><span class="text-sm">Only devices on my home network</span><span class="hint">Recommended</span></span>
     </label>
     <label class="flex items-start gap-3 min-h-10 cursor-pointer">
-      <input type="radio" name="access" value="internet" bind:group={access} class="w-5.5 h-5.5 mt-0.5 accent-[color:var(--accent)]" />
+      <input type="radio" name="access" value="internet" bind:group={access} class="w-5.5 h-5.5 mt-0.5 accent-[color:var(--accent)]" disabled={!!fromContainer} />
       <span class="text-sm">Anyone on the internet</span>
     </label>
     {#if access === 'internet'}
@@ -209,7 +216,7 @@
     <summary class="min-h-10 flex items-center font-semibold text-sm cursor-pointer">Advanced</summary>
     <div class="flex flex-col gap-5 pt-3 pb-5">
       <label class="flex items-start gap-3 cursor-pointer">
-        <input type="checkbox" bind:checked={https} class="w-5.5 h-5.5 mt-0.5 accent-[color:var(--accent)]" />
+        <input type="checkbox" bind:checked={https} class="w-5.5 h-5.5 mt-0.5 accent-[color:var(--accent)]" disabled={!!fromContainer} />
         <span class="flex flex-col"><span class="text-sm">The service uses HTTPS itself</span><span class="hint">Set for you when we detect it.</span></span>
       </label>
       {#if https}
@@ -230,7 +237,7 @@
       </label>
       <div>
         <label for="extra" class="text-sm block mb-1.5">Other names for this service</label>
-        <input id="extra" class="input" bind:value={extraNames} autocomplete="off" spellcheck="false" placeholder="movies, films" />
+        <input id="extra" class="input" bind:value={extraNames} autocomplete="off" spellcheck="false" placeholder="movies, films" disabled={!!fromContainer} />
         <div class="hint mt-1.5">Separate with commas. Each becomes another address under .{settings?.domain}.</div>
         {#if errorField === 'extraNames'}<div class="field-error">{error}</div>{/if}
       </div>

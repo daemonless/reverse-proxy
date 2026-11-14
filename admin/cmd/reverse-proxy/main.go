@@ -50,9 +50,11 @@ func main() {
 		os.Exit(hostsCmd(*listen, flag.Args()[1:]))
 	case "listen":
 		os.Exit(listenCmd(*listen, flag.Args()[1:]))
+	case "podman-labels":
+		os.Exit(podmanLabelsCmd(*listen, flag.Args()[1:]))
 	case "":
 	default:
-		fmt.Fprintf(os.Stderr, "reverse-proxy: unknown command %q\n\nCommands:\n  hosts           list, add, remove or restore hosts\n  listen          answer on every network, or on some\n  reset-password  forget the password and print a new setup link\n", flag.Arg(0))
+		fmt.Fprintf(os.Stderr, "reverse-proxy: unknown command %q\n\nCommands:\n  hosts           list, add, remove or restore hosts\n  listen          answer on every network, or on some\n  podman-labels   name containers by their labels (the unit; needs podman's socket)\n  reset-password  forget the password and print a new setup link\n", flag.Arg(0))
 		os.Exit(2)
 	}
 	log.Printf("[admin] reverse-proxy %s", version)

@@ -1,0 +1,6 @@
+#!/bin/sh
+# Names containers by their labels. Root, like Caddy: podman's socket is
+# root's. Idles when no socket is mounted; the README says how to mount it.
+exec /usr/local/bin/reverse-proxy \
+	-listen /var/run/reverse-proxy/admin.sock \
+	podman-labels

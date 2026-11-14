@@ -1049,6 +1049,10 @@
             "default": false,
             "description": "The service checks Origin and Referer against its own address (UniFi does): requests from this name's own pages reach it with its address in those headers. Off by default, since most services compare Origin with the Host they are given. Left as it was when a PUT omits it."
           },
+          "note": {
+            "type": "string",
+            "description": "A line from the source that made the host: for a container named by its labels (ref podman:<container>), a label the proxy could not honor or how the container is reached. Shown on the Names page; left as it was when a PUT omits it."
+          },
           "watch": {
             "type": "boolean",
             "description": "check that it is up (uptime and alerts); true when created without it. Left out of an update, it stays as it was."

@@ -12,6 +12,9 @@
 
   type Step = 'welcome' | 'token' | 'password' | 'networks' | 'kind' | 'free' | 'address' | 'certs' | 'dns' | 'trust' | 'done' | 'restore'
   let step = $state<Step>('welcome')
+  // Containers with proxy labels seen before there was an ending to name them under.
+  let waitingContainers = $state<string[]>([])
+  get<{ waiting?: string[] }>('/api/v1/sources/podman').then((p) => (waitingContainers = p.waiting ?? [])).catch(() => {})
   let token = $state('')
   let verified = $state(false)
   // The app that installed this proxy (a paired key), for the last step:
@@ -51,7 +54,7 @@
     return r
   })
   // A proxy on several networks asks which are home, before anything else
-  // depends on it: unticked ones cannot open it and are never home.
+  // depends on it: ones switched off cannot open it and are never home.
   let nets = $state<Settings | null>(null)
   const multi = $derived((nets?.networks?.length ?? 0) > 1)
   let chosen = $state<string[]>([])
@@ -296,11 +299,11 @@
     {:else if step === 'networks'}
       <form onsubmit={saveNetworks} class="contents">
         <h1 class="m-0 text-2xl font-bold text-fg leading-tight">Which is your home network?</h1>
-        <p class="m-0 hint text-sm">This proxy is on {nets?.networks?.length} networks. It reaches your apps on all of them; devices on the ticked ones can open it and your home-only names.</p>
+        <p class="m-0 hint text-sm">This proxy is on {nets?.networks?.length} networks. It reaches your apps on all of them; devices on the ones switched on can open it and your home-only names.</p>
         <div class="flex flex-col gap-1">
           <NetworkChoice networks={nets?.networks ?? []} here={nets?.here ?? ''} {chosen} ontoggle={(n, on) => { chosen = on ? [...chosen, n] : chosen.filter((x) => x !== n) }} />
         </div>
-        <p class="m-0 hint text-sm">Not sure? Leave them all ticked. You can change this later in Settings.</p>
+        <p class="m-0 hint text-sm">Not sure? Leave them all on. You can change this later in Settings.</p>
         {#if error}<div class="field-error">{error}</div>{/if}
         <div class="flex justify-end"><button class="btn-primary" disabled={busy}>Continue</button></div>
       </form>
@@ -436,6 +439,9 @@
 
     {:else}
       <h1 class="m-0 text-2xl font-bold text-fg leading-tight">You're set</h1>
+      {#if waitingContainers.length}
+        <p class="m-0 text-sm leading-snug">{waitingContainers.length === 1 ? `Container ${waitingContainers[0]} carries a proxy label and gets its name now.` : `${waitingContainers.length} containers carry proxy labels and get their names now.`}</p>
+      {/if}
       {#if pairedWith}
         <p class="m-0 text-sm leading-snug">{pairedWith} is connected. Give an app a name there and it shows up here, pointed at the app; names it makes follow the app when it moves.</p>
         <div class="flex justify-end gap-2">

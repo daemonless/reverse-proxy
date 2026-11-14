@@ -53,37 +53,111 @@ Before deploying, ensure your host environment is ready. See the [Quick Start Gu
 
 ### Podman Compose
 
-```yaml
+**Names from container labels.** Containers on this machine with io.daemonless.proxy labels get names here. The proxy reads podman's socket; the web UI never does.
+
+#### Off (default)
+
+Save as `compose.yaml`:
+
+```yaml { data-zip-bundle="reverse-proxy-podman" data-zip-filename="compose.yaml" }
+name: reverse-proxy
+
 services:
   reverse-proxy:
-    image: "ghcr.io/daemonless/reverse-proxy:latest"
+    image: ghcr.io/daemonless/reverse-proxy:latest
     container_name: reverse-proxy
-    environment:
-      - PUID=1000  # User ID for the admin process (Caddy stays root to bind 80 and 443)
-      - PGID=1000  # Group ID for the admin process
-      - TZ=UTC  # Timezone for the container
-      - RP_PAIRING_KEY=<RP_PAIRING_KEY>  # Admin only. A key (32+ random characters) an app that installed the proxy, such as fjord, uses to manage hosts; registered once as a connected app
-      - RP_PAIRING_NAME=fjord  # Admin only. The connected app's name for RP_PAIRING_KEY. Default: Paired app
-      - RP_PAIRING_ID=  # Admin only. The installing app's permanent id, so several of them are told apart. Optional.
-      - RP_SETUP_TOKEN=<RP_SETUP_TOKEN>  # Admin only. First-run setup token chosen by the installing app, so it can open setup for you. Default: a new one in the log
-      - RP_PAIRING_URL=  # Admin only. Where the installing app is opened, shown as a way back to it. Optional.
-      # - RP_ADMIN_URL=  # Where you open the admin UI, e.g. https://192.168.1.5:8443. Optional: the proxy remembers the address you sign in at; this makes the first-run link exact before anyone has.
-      # - RP_TRUST_PORT=  # Host port that reaches the HTTP trust page if you publish it on something other than 80. Optional.
-      # - RP_DEBUG=  # Set to 1 for Caddy's full info-level log. Off by default so the log stays readable.
-    volumes:
-      - "/containers/reverse-proxy:/config"
-      - "/containers/reverse-proxy/data:/data"
-    ports:
-      - "80:80"
-      - "443:443"
-      - "8443:8443"
-    # always (not unless-stopped) so FreeBSD's podman rc.d auto-starts it at boot
+    # "always", not "unless-stopped": FreeBSD's podman rc.d only auto-starts
+    # containers with restart-policy=always at boot (needs podman_enable=YES).
     restart: always
+    # SELinux (Fedora, RHEL): lets the proxy use its folders and podman's
+    # socket. Ignored where there is no SELinux.
+    security_opt:
+      - label=disable
+
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=UTC
+      # - RP_ADMIN_URL=https://192.168.1.5:8443
+      # Set by an app that installs the proxy (fjord); empty otherwise.
+      - RP_PAIRING_KEY=
+      - RP_PAIRING_NAME=fjord
+      - RP_PAIRING_ID=
+      - RP_SETUP_TOKEN=
+      - RP_PAIRING_URL=
+
+    volumes:
+      - /path/to/containers/reverse-proxy:/config
+      - /path/to/containers/reverse-proxy/data:/data
+      # Names from container labels: point RP_PODMAN_DIR at the host's
+      # /var/run/podman (the directory). Empty directory: off.
+      - ${RP_PODMAN_DIR:-/path/to/containers/reverse-proxy/podman}:/var/run/podman:ro
+
+    ports:
+      - 80:80
+      - 443:443
+      - 8443:8443
 ```
 
-Save as `compose.yaml`, then run `podman-compose up -d`.
+Then run `podman-compose up -d`.
+
+#### On: the proxy reads podman's socket
+
+**1.** Save as `.env` and fill in what is empty:
+
+```env { data-zip-bundle="reverse-proxy-podman-container_labels-on" data-zip-filename=".env" }
+# Names from container labels: On: the proxy reads podman's socket
+RP_PODMAN_DIR=/var/run/podman
+```
+
+**2.** Save as `compose.yaml`:
+
+```yaml { data-zip-bundle="reverse-proxy-podman-container_labels-on" data-zip-filename="compose.yaml" }
+name: reverse-proxy
+
+services:
+  reverse-proxy:
+    image: ghcr.io/daemonless/reverse-proxy:latest
+    container_name: reverse-proxy
+    # "always", not "unless-stopped": FreeBSD's podman rc.d only auto-starts
+    # containers with restart-policy=always at boot (needs podman_enable=YES).
+    restart: always
+    # SELinux (Fedora, RHEL): lets the proxy use its folders and podman's
+    # socket. Ignored where there is no SELinux.
+    security_opt:
+      - label=disable
+
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=UTC
+      # - RP_ADMIN_URL=https://192.168.1.5:8443
+      # Set by an app that installs the proxy (fjord); empty otherwise.
+      - RP_PAIRING_KEY=
+      - RP_PAIRING_NAME=fjord
+      - RP_PAIRING_ID=
+      - RP_SETUP_TOKEN=
+      - RP_PAIRING_URL=
+
+    volumes:
+      - /path/to/containers/reverse-proxy:/config
+      - /path/to/containers/reverse-proxy/data:/data
+      # Names from container labels: point RP_PODMAN_DIR at the host's
+      # /var/run/podman (the directory). Empty directory: off.
+      - ${RP_PODMAN_DIR:-/path/to/containers/reverse-proxy/podman}:/var/run/podman:ro
+
+    ports:
+      - 80:80
+      - 443:443
+      - 8443:8443
+```
+
+Then run `podman-compose up -d`.
 
 ### AppJail Director
+
+#### Off (default)
+
 **.env**:
 
 ```
@@ -130,11 +204,14 @@ services:
     volumes:
       - reverse-proxy: /config
       - reverse-proxy_data: /data
+      - reverse-proxy_podman}: -/path/to/containers/reverse-proxy/podman}
 volumes:
   reverse-proxy:
     device: '/containers/reverse-proxy'
   reverse-proxy_data:
     device: '/containers/reverse-proxy/data'
+  reverse-proxy_podman}:
+    device: '/containers/reverse-proxy/podman}'
 ```
 
 **Makejail**:
@@ -151,39 +228,78 @@ OPTION from=ghcr.io/daemonless/reverse-proxy:${tag}
 
 Save the files above, then run `appjail-director up`.
 
+#### On: the proxy reads podman's socket
 
-> [!WARNING]
-> Exposing ports in AppJail means that your service can be reached from remote hosts. If that is not your intention, do not expose the ports and communicate with the service using the jail's IPv4 address or hostname assigned by the virtual network.
->
-> To avoid exposing ports, just remove the `expose` option in your `appjail-director.yml` or from your command-line arguments.
+**.env**:
 
-### Bastille
+```
+# .env
 
-> [!WARNING]
-> Bastille's OCI support is **experimental**. It requires `buildah` and shares the host network stack (`inherit`). Mount volumes with `--volume HOST JAIL`; without it, image-declared volumes are stored under `${bastille_volumesdir}/${jail}`.
-
-```yaml
-services:
-  reverse-proxy:
-    name: reverse-proxy
-    image: "ghcr.io/daemonless/reverse-proxy:latest"
-    network:
-      - mode: host
-    environment:
-      - PUID=1000
-      - PGID=1000
-      - TZ=UTC
-      - RP_PAIRING_KEY=<RP_PAIRING_KEY>
-      - RP_PAIRING_NAME=fjord
-      - RP_PAIRING_ID=
-      - RP_SETUP_TOKEN=<RP_SETUP_TOKEN>
-      - RP_PAIRING_URL=
-    volumes:
-      - "/containers/reverse-proxy:/config"
-      - "/containers/reverse-proxy/data:/data"
+DIRECTOR_PROJECT=reverse-proxy
+PUID=1000
+PGID=1000
+TZ=UTC
+RP_PAIRING_KEY=<RP_PAIRING_KEY>
+RP_PAIRING_NAME=fjord
+RP_PAIRING_ID=
+RP_SETUP_TOKEN=<RP_SETUP_TOKEN>
+RP_PAIRING_URL=
+RP_PODMAN_DIR=/var/run/podman
 ```
 
-Save as `bastille-compose.yml`, then run `bastille up`.
+**appjail-director.yml**:
+
+```yaml
+# appjail-director.yml
+
+options:
+  - virtualnet: ':<random> default'
+  - nat:
+services:
+  reverse-proxy:
+    name: reverse_proxy
+    options:
+      - container: 'args:--pull'
+      - expose: '80:80 proto:tcp'
+      - expose: '443:443 proto:tcp'
+      - expose: '8443:8443 proto:tcp'
+    oci:
+      user: root
+      environment:
+        - PUID: !ENV '${PUID}'
+        - PGID: !ENV '${PGID}'
+        - TZ: !ENV '${TZ}'
+        - RP_PAIRING_KEY: !ENV '${RP_PAIRING_KEY}'
+        - RP_PAIRING_NAME: !ENV '${RP_PAIRING_NAME}'
+        - RP_PAIRING_ID: !ENV '${RP_PAIRING_ID}'
+        - RP_SETUP_TOKEN: !ENV '${RP_SETUP_TOKEN}'
+        - RP_PAIRING_URL: !ENV '${RP_PAIRING_URL}'
+    volumes:
+      - reverse-proxy: /config
+      - reverse-proxy_data: /data
+      - reverse-proxy_podman}: -/path/to/containers/reverse-proxy/podman}
+volumes:
+  reverse-proxy:
+    device: '/containers/reverse-proxy'
+  reverse-proxy_data:
+    device: '/containers/reverse-proxy/data'
+  reverse-proxy_podman}:
+    device: '/containers/reverse-proxy/podman}'
+```
+
+**Makejail**:
+
+```
+# Makejail
+
+ARG tag=latest
+
+OPTION container=boot
+OPTION overwrite=force
+OPTION from=ghcr.io/daemonless/reverse-proxy:${tag}
+```
+
+Save the files above, then run `appjail-director up`.
 Open `http://<server>:80` from another machine (the server's own browser can't use a published port).
 
 ## Parameters
@@ -210,6 +326,7 @@ Open `http://<server>:80` from another machine (the server's own browser can't u
 |------|-------------|
 | `/config` | Admin state and secrets |
 | `/data` | Certificates, ACME account and the internal CA |
+| `-/path/to/containers/reverse-proxy/podman}` |  |
 
 ### Ports
 
@@ -291,6 +408,41 @@ the two pair by themselves: fjord passes a key and a setup link, and its
 Finish setup button opens setup already verified. After that, fjord
 lists the apps that have no name yet and names the ones you pick, and
 keeps each name pointing at its app when the app's address changes.
+
+### Names from container labels
+
+A container on the same machine can ask for its name with labels, the
+way Traefik users expect, without fjord or a key. Turn it on by giving
+the proxy podman's socket: the `RP_PODMAN_DIR` line under `volumes`
+mounts the host's `/var/run/podman` (the directory, so the socket
+survives a `podman_service` restart). In fjord it is the "Name
+containers by their labels" switch. The proxy's root unit reads the
+socket; the web UI never does. `:ro` does not limit a socket: whoever
+holds it can run podman, so it goes only to a proxy you trust with that.
+Settings can turn names from labels off while the socket is mounted.
+
+| Label | Means |
+|---|---|
+| `io.daemonless.proxy=true` | Name it after the container (`radarr` becomes `radarr.<your ending>`). Enough for a daemonless image: the port is the image's own. |
+| `io.daemonless.proxy.name=movies` | A different name. |
+| `io.daemonless.proxy.port=7878` | The port, when the image declares none or several. |
+| `io.daemonless.proxy.names=films,cinema` | More names for the same container. |
+| `io.daemonless.proxy.public=true` | Open it to the internet (with a public ending). |
+| `io.daemonless.proxy.https=true` | The container itself speaks HTTPS; its own certificate is accepted. |
+| `io.daemonless.proxy.own-origin=true` | The service expects its own address in Origin and Referer (UniFi). |
+
+The proxy reaches the container on a network they share (the default
+`podman` bridge: no port needs publishing), else through a published
+port on the host, and says which on the Names page. The labels own the
+name, port and access, shown read-only; trusted networks, own address,
+the icon and the uptime check are edited in the proxy and survive a
+`podman-compose up`. A stopped container keeps its name and shows as
+down; a removed one loses it, restorably for a day; a recreated one
+(new address, or a new name in its labels) is followed. A label the
+proxy cannot honor, a name another container or a hand-made name
+already has, or a container it cannot reach is listed on the Names
+page with the reason, never guessed at. Settings → Connected apps shows
+whether podman is being read.
 
 ### Your own app
 

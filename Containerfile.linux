@@ -4,7 +4,7 @@
 # admin runs as bsd (PUID/PGID), as on FreeBSD. Keep APP_VER with
 # Containerfile.j2's: the manifest adds this image to a tag only when the
 # versions agree.
-ARG APP_VER=0.2.0
+ARG APP_VER=0.3.0
 ARG CADDY_VERSION=
 
 FROM golang:1.26-alpine AS caddy-build

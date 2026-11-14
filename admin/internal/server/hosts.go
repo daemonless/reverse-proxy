@@ -28,6 +28,9 @@ type hostInput struct {
 	OwnOrigin *bool `json:"ownOrigin,omitempty"`
 	// Watch is kept as it was when absent, for the same reason.
 	Watch *bool `json:"watch,omitempty"`
+	// Note is kept as it was when absent: only the source that made the
+	// host (podman-labels) sends it.
+	Note *string `json:"note,omitempty"`
 }
 
 // hostView is a host as the API presents it, with the names resolved.
@@ -77,6 +80,12 @@ func (in hostInput) apply(h *state.Host) {
 	if in.Watch != nil {
 		h.Unwatched = !*in.Watch
 	}
+	if in.Note != nil {
+		h.Note = strings.TrimSpace(*in.Note)
+		if len(h.Note) > 200 {
+			h.Note = h.Note[:200]
+		}
+	}
 }
 
 // listHosts is the live hosts; ?include=removed adds the ones removed in
@@ -85,7 +94,14 @@ func (s *Server) listHosts(w http.ResponseWriter, r *http.Request) {
 	st := s.mgr.State()
 	hosts := st.Live()
 	if r.URL.Query().Get("include") == "removed" {
-		hosts = st.Hosts
+		hosts = hosts[:0:0]
+		for _, h := range st.Hosts {
+			// Held names come back with the container-labels switch, not
+			// with Undo: they are not listed as removed.
+			if !h.Held {
+				hosts = append(hosts, h)
+			}
+		}
 	}
 	out := []hostView{}
 	for _, h := range hosts {
@@ -139,6 +155,9 @@ func (s *Server) createHost(w http.ResponseWriter, r *http.Request) {
 		if st.Settings.Domain == "" {
 			return &state.FieldError{Field: "", Msg: "set the address your services live under first (settings)"}
 		}
+		if err := labelsOff(st, h.Ref); err != nil {
+			return err
+		}
 		// One host per ref: a connected app that retries, or lost track of
 		// what it made, gets the host it already has.
 		for _, o := range st.Hosts {
@@ -159,6 +178,23 @@ func (s *Server) createHost(w http.ResponseWriter, r *http.Request) {
 				continue
 			}
 			h.ID, h.CreatedAt = o.ID, o.CreatedAt
+			if h.Ref == "" {
+				*o = h // added again by hand: a new name, nothing carried over
+				return nil
+			}
+			// What the UI set comes back with it: a name that left with
+			// its container (or with container labels turned off) returns
+			// as it was, not as new.
+			h.Icon = o.Icon
+			if in.Watch == nil {
+				h.Unwatched = o.Unwatched
+			}
+			if in.OwnOrigin == nil {
+				h.OwnOrigin = o.OwnOrigin
+			}
+			if len(h.TrustedNetworks) == 0 {
+				h.TrustedNetworks = o.TrustedNetworks
+			}
 			*o = h
 			return nil
 		}
@@ -191,6 +227,9 @@ func (s *Server) updateHost(w http.ResponseWriter, r *http.Request) {
 		}
 		h := st.Hosts[i]
 		in.apply(&h)
+		if err := labelsOff(st, h.Ref); err != nil {
+			return err
+		}
 		if err := state.ValidateHost(h, st.Hosts); err != nil {
 			return err
 		}
@@ -242,7 +281,10 @@ func (s *Server) restoreHost(w http.ResponseWriter, r *http.Request) {
 			return errNotFound
 		}
 		h := st.Hosts[i]
-		h.DeletedAt = nil
+		if err := labelsOff(st, h.Ref); err != nil {
+			return err
+		}
+		h.DeletedAt, h.Held = nil, false
 		if err := state.ValidateHost(h, st.Hosts); err != nil {
 			return err // its name was reused meanwhile
 		}
@@ -377,3 +419,12 @@ func (e sentinel) Error() string { return string(e) }
 const errRefTaken sentinel = "a host with this ref exists"
 
 const errNotFound = sentinel("not found")
+
+// labelsOff refuses a name from container labels while they are turned off:
+// a reconcile already under way must not bring back what the switch removed.
+func labelsOff(st *state.State, ref string) error {
+	if st.Settings.Sources.PodmanOff && strings.HasPrefix(ref, state.PodmanRefPrefix) {
+		return &state.FieldError{Field: "", Msg: "names from container labels are turned off (Settings)"}
+	}
+	return nil
+}

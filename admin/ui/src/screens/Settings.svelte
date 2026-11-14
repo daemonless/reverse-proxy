@@ -1,8 +1,10 @@
 <script lang="ts">
-  import { get, put, post, del, ApiError, type Settings, type Token, type Status, type DnsCheck, type TrustInfo, type Certificates } from '../lib/api'
+  import { get, put, post, del, ApiError, type Settings, type Token, type Status, type DnsCheck, type TrustInfo, type Certificates, type PodmanSource } from '../lib/api'
   import { session } from '../lib/session.svelte'
   import { navigate } from '../lib/router.svelte'
   import { toast } from '../lib/toast.svelte'
+  import SettingRow from '../components/SettingRow.svelte'
+  import Switch from '../components/Switch.svelte'
   import { copyText } from '../lib/copy'
   import { focus } from '../lib/focus'
   import DnsGuide from '../components/DnsGuide.svelte'
@@ -125,10 +127,19 @@
     finally { dnsBusy = false }
   }
 
+  let podman = $state<PodmanSource | null>(null)
+  let podmanBusy = $state(false)
+  async function setPodman(on: boolean) {
+    podmanBusy = true
+    try { podman = await put<PodmanSource>('/api/v1/sources/podman/enabled', { enabled: on }); toast(on ? 'Names from container labels are on' : 'Off. Their names come back as they were when you turn this on.') }
+    catch (err) { toast(err instanceof ApiError ? err.message : 'Something went wrong') }
+    finally { podmanBusy = false }
+  }
   async function load() {
-    ;[settings, status, tokens] = await Promise.all([
+    ;[settings, status, tokens, podman] = await Promise.all([
       get<Settings>('/api/v1/settings'), get<Status>('/api/v1/status'),
       get<{ tokens: Token[] }>('/api/v1/tokens').then((r) => r.tokens),
+      get<PodmanSource>('/api/v1/sources/podman').catch(() => null),
     ])
     if (settings.domain) checkDns()
     if (settings.mode === 'public') loadCerts()
@@ -150,7 +161,7 @@
     try { settings = { ...settings!, ...(await put<Settings>('/api/v1/settings', { domain: settings!.domain, trustedNetworks: settings!.trustedNetworks, shortLinks: word })) }; shortEdit = false; checkDns(); toast(word ? `Short links: ${word}/` : 'Short links are off') }
     catch (err) { shortError = err instanceof ApiError ? err.message : 'Something went wrong' }
   }
-  // Home network: the proxy's own networks (ticked ones can open it and
+  // Home network: the proxy's own networks (ones switched on can open it and
   // count as home) and networks routed to it, like a VPN.
   let listenError = $state('')
   const allNets = $derived((settings?.networks ?? []).map((n) => n.network))
@@ -327,43 +338,41 @@
   {#if settings.domain}
   <section class="flex flex-col gap-2.5">
     <h3 class="m-0 text-sm text-muted font-semibold">Short links</h3>
-    <div class="card px-6 py-5 flex flex-col gap-3">
-      <div class="flex items-center justify-between gap-4 flex-wrap">
-        <span class="flex flex-col">
-          {#if settings.shortLinks}
-            <span class="text-sm">Type <strong class="font-mono">{settings.shortLinks}/radarr</strong> in a browser to open <span class="font-mono">radarr.{settings.domain}</span>.</span>
-            <span class="hint">Any of your names works, with its path: {settings.shortLinks}/radarr/settings. {settings.shortLinks}/ alone lists them.</span>
-          {:else}
-            <span class="text-sm">Off. Short links open a name from a short word, like <span class="font-mono">go/radarr</span>.</span>
-          {/if}
-        </span>
-        <span class="flex gap-2 flex-wrap">
-          {#if !shortEdit}
-            {#if settings.shortLinks}<button type="button" class="btn-plain min-h-10 px-3 text-sm text-accent" onclick={() => { shortWord = settings!.shortLinks ?? ''; shortEdit = true; shortError = '' }}>Change</button>{/if}
-            <button type="button" class="btn-plain min-h-10 px-3 text-sm text-accent" onclick={() => saveShort(settings!.shortLinks ? '' : 'go')}>{settings.shortLinks ? 'Turn off' : 'Turn on'}</button>
-          {/if}
-        </span>
-      </div>
-      {#if shortEdit}
-        <form class="flex gap-2 flex-wrap items-start" onsubmit={(e) => { e.preventDefault(); saveShort(shortWord.trim().toLowerCase()) }}>
-          <div class="flex items-center gap-2"><input class="input font-mono w-40" bind:value={shortWord} aria-label="Short word" autocomplete="off" spellcheck="false" required use:focus /><span class="font-mono text-sm text-muted">/radarr</span></div>
-          <button class="btn-soft min-h-10 px-4">Save</button>
-          <button type="button" class="btn-plain min-h-10 px-3" onclick={() => (shortEdit = false)}>Cancel</button>
-        </form>
-      {/if}
-      {#if shortError}<div class="field-error">{shortError}</div>{/if}
+    <div class="card overflow-hidden divide-y divide-[color:var(--border)]">
+      <SettingRow title="Short links">
+        Open a name from a short word, like <span class="font-mono text-fg-body">{settings.shortLinks || 'go'}/radarr</span>.
+        {#snippet control()}<Switch checked={!!settings!.shortLinks} label="Short links" onchange={(on) => saveShort(on ? 'go' : '')} />{/snippet}
+      </SettingRow>
       {#if settings.shortLinks}
-        <div class="flex items-center justify-between gap-3 flex-wrap">
-          <span class="flex items-center gap-3">
-            <span class="w-3 h-3 rounded-full shrink-0 box-border {shortOk ? 'bg-success' : 'border-[3px] border-warning'}"></span>
-            <span class="flex flex-col"><span class="text-sm">{settings.shortLinks} points at the proxy</span>
-              <span class="hint">{#if shortOk}{dns?.short?.name} reaches this proxy.{:else}Your router needs one more name: <strong class="font-mono text-fg">{settings.shortLinks}</strong> pointing at this proxy{#if proxyAddr}{' '}(<span class="font-mono">{proxyAddr}</span>){/if}.{/if}</span>
-            </span>
-          </span>
-          <button type="button" class="btn-plain min-h-10 px-3 text-sm text-accent" onclick={() => (shortHow = !shortHow)}>{shortHow ? 'Hide' : 'Router record'}</button>
+        <div class="flex flex-col gap-3">
+          <SettingRow title="Word">
+            Any of your names works, with its path: {settings.shortLinks}/radarr/settings. {settings.shortLinks}/ alone lists them.
+            {#snippet control()}
+              {#if !shortEdit}<button type="button" class="btn-plain min-h-10 px-3 text-sm text-accent" onclick={() => { shortWord = settings!.shortLinks ?? ''; shortEdit = true; shortError = '' }}>Change</button>{/if}
+            {/snippet}
+          </SettingRow>
+          {#if shortEdit}
+            <form class="flex gap-2 flex-wrap items-start px-6 pb-4 -mt-3" onsubmit={(e) => { e.preventDefault(); saveShort(shortWord.trim().toLowerCase()) }}>
+              <div class="flex items-center gap-2"><input class="input font-mono w-40" bind:value={shortWord} aria-label="Short word" autocomplete="off" spellcheck="false" required use:focus /><span class="font-mono text-sm text-muted">/radarr</span></div>
+              <button class="btn-soft min-h-10 px-4">Save</button>
+              <button type="button" class="btn-plain min-h-10 px-3" onclick={() => (shortEdit = false)}>Cancel</button>
+            </form>
+          {/if}
         </div>
-        {#if shortHow}<ShortLinkGuide short={settings.shortLinks} ip={proxyAddr} />{/if}
+        <div>
+          <div class="flex items-center justify-between gap-4 px-6 py-4">
+            <span class="flex items-center gap-3 min-w-0">
+              <span class="w-3 h-3 rounded-full shrink-0 box-border {shortOk ? 'bg-success' : 'border-[3px] border-warning'}"></span>
+              <span class="flex flex-col gap-0.5 min-w-0"><span class="text-sm font-semibold text-fg">{settings.shortLinks} points at the proxy</span>
+                <span class="hint">{#if shortOk}{dns?.short?.name} reaches this proxy.{:else}Your router needs one more name: <strong class="font-mono text-fg">{settings.shortLinks}</strong> pointing at this proxy{#if proxyAddr}{' '}(<span class="font-mono">{proxyAddr}</span>){/if}.{/if}</span>
+              </span>
+            </span>
+            <button type="button" class="btn-plain min-h-10 px-3 text-sm text-accent shrink-0" onclick={() => (shortHow = !shortHow)}>{shortHow ? 'Hide' : 'Router record'}</button>
+          </div>
+          {#if shortHow}<div class="px-6 pb-4"><ShortLinkGuide short={settings.shortLinks} ip={proxyAddr} /></div>{/if}
+        </div>
       {/if}
+      {#if shortError}<div class="field-error px-6 py-3">{shortError}</div>{/if}
     </div>
   </section>
   {/if}
@@ -372,7 +381,7 @@
     <h3 class="m-0 text-sm text-muted font-semibold">Home network</h3>
     <div class="card px-6 py-5 flex flex-col gap-3">
       {#if (settings.networks?.length ?? 0) > 1 || settings.listen?.length}
-        <div class="hint text-sm">This proxy is on {settings.networks?.length} networks and reaches your apps on all of them. Devices on the ticked ones can open it and your home-only names.</div>
+        <div class="hint text-sm">This proxy is on {settings.networks?.length} networks and reaches your apps on all of them. Devices on the ones switched on can open it and your home-only names.</div>
         {#if settings.listenSetBy}
           <div class="text-sm">Only <span class="font-mono">{answering.map(netName).join(', ')}</span>. <span class="text-muted">{settings.listenSetBy} in the container's settings decides this.</span></div>
         {:else}
@@ -509,6 +518,46 @@
         <button class="btn-soft">Make a key</button>
       </form>
       {#if appError}<div class="field-error">{appError}</div>{/if}
+    </div>
+  </section>
+
+  <!-- Containers on this host named by their labels: on when podman's
+       socket directory is mounted into the proxy (see the README). -->
+  <section class="flex flex-col gap-2.5">
+    <h3 class="m-0 text-sm text-muted font-semibold">Container labels</h3>
+    <div class="card overflow-hidden">
+      <SettingRow title="Names from container labels">
+        {#if podman?.socket && !podman.enabled}
+          Off. The proxy can read podman; turn this on to name containers with a proxy label.
+        {:else if podman?.socket && !podman.error}
+          {podman.containers === 0 ? 'Reading podman. No container carries a proxy label yet.' : podman.containers === 1 ? 'Reading podman. 1 container carries a proxy label.' : `Reading podman. ${podman.containers} containers carry proxy labels.`}{#if podman.problems?.length} {podman.problems.length === 1 ? 'One got no name; the Names page says why.' : `${podman.problems.length} got no name; the Names page says why.`}{/if}{#if podman.elsewhere?.length} {podman.elsewhere.length === 1 ? 'One is also named by another app.' : `${podman.elsewhere.length} are also named by another app.`}{/if}
+        {:else if podman?.error}
+          The proxy cannot read podman.
+        {:else}
+          A container on this machine with a proxy label gets a name here.
+        {/if}
+        {#snippet control()}
+          {#if podman?.socket}
+            {#if podman.error && podman.enabled}<span class="state-pill bg-warning-soft text-warning-soft-fg"><span class="w-2 h-2 rounded-full bg-warning"></span>Problem</span>{/if}
+            <Switch checked={podman.enabled} disabled={podmanBusy} label="Names from container labels" onchange={setPodman} />
+          {:else if podman?.error}
+            <span class="state-pill bg-warning-soft text-warning-soft-fg"><span class="w-2 h-2 rounded-full bg-warning"></span>Problem</span>
+          {:else}
+            <span class="state-pill bg-chip text-fg-secondary border border-[color:var(--border)]"><span class="w-2 h-2 rounded-full bg-dim"></span>Off</span>
+          {/if}
+        {/snippet}
+      </SettingRow>
+      {#if podman?.error && podman?.enabled}
+        <div class="px-6 pb-4 -mt-1"><div class="rounded-md bg-warning-soft text-warning-soft-fg text-xs px-3 py-2 break-words">{podman.error}</div></div>
+      {/if}
+      {#if !podman?.socket || podman?.error}
+        <div class="border-t border-[color:var(--border)] px-6 py-4 flex flex-col gap-2">
+          <span class="text-sm font-semibold text-fg">{podman?.error ? 'Check the mount' : 'To turn it on'}</span>
+          <span class="hint">Mount the host's podman socket folder into the proxy. In the compose:</span>
+          <pre class="m-0 rounded-md bg-inset border border-[color:var(--border)] px-3 py-2 text-xs font-mono text-fg-body overflow-x-auto">- /var/run/podman:/var/run/podman:ro</pre>
+          <span class="hint">Then give a container the label <span class="font-mono text-fg-body">io.daemonless.proxy=true</span>. The socket lets the proxy control podman, so mount it only if you trust the proxy with that.</span>
+        </div>
+      {/if}
     </div>
   </section>
 

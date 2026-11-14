@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { get, post, type Host, type Health, type Uptime, type Settings, type Certificates, type CertStatus, type DnsCheck } from '../lib/api'
+  import { get, post, containerOf, type Host, type Health, type Uptime, type Settings, type Certificates, type CertStatus, type DnsCheck, type PodmanSource } from '../lib/api'
   import { link, navigate } from '../lib/router.svelte'
   import { deviceTrust } from '../lib/trust.svelte'
   import { paired } from '../lib/paired.svelte'
@@ -10,6 +10,10 @@
 
   // The certificate banner: only while something is happening to it.
   let cert = $state<CertStatus | null>(null)
+  // Containers the podman-labels unit could not name, for the card above the list.
+  let podman = $state<PodmanSource | null>(null)
+  async function loadPodman() { try { podman = await get<PodmanSource>('/api/v1/sources/podman') } catch { podman = null } }
+  loadPodman()
   async function loadCert() {
     try { cert = (await get<Certificates>('/api/v1/certificates')).status } catch { cert = null }
   }
@@ -84,6 +88,8 @@
   }
   const onChanged = () => load()
   window.addEventListener('hosts-changed', onChanged)
+  const podmanEvery = setInterval(loadPodman, 30000)
+  $effect(() => () => clearInterval(podmanEvery))
   $effect(() => () => window.removeEventListener('hosts-changed', onChanged))
   const every = setInterval(loadUptime, 30000)
   $effect(() => () => clearInterval(every))
@@ -205,6 +211,9 @@
         </span>
       {/if}
     {/snippet}
+    {#snippet note(h: Host)}
+      {#if h.note}<span class="text-xs text-warning">{h.note}</span>{/if}
+    {/snippet}
     {#snippet dot(st: { ok: boolean | null })}
       <span class="inline-block w-3 h-3 rounded-full shrink-0 box-border {st.ok === true ? 'bg-success' : st.ok === false ? 'border-[3px] border-danger' : 'border-[3px] border-[color:var(--border)]'}"></span>
     {/snippet}
@@ -212,7 +221,10 @@
          open to the internet. Home-network-only is the default and goes
          without saying. -->
     {#snippet chips(h: Host)}
-      {#if paired.appFor(h)}
+      {#if containerOf(h)}
+        <!-- A label on the container made this name and owns it; the UI owns the rest. -->
+        <span class="chip" title="The labels on container {containerOf(h)} set the name, port and access; change those in its labels. Trusted networks, own address and the uptime check are edited here.">From container {containerOf(h)}</span>
+      {:else if paired.appFor(h)}
         <!-- A connected app made this host and keeps it pointed at the app. -->
         <span class="chip" title="{paired.appFor(h)} made this name and keeps it pointed at the app. Edit the name here; the address follows the app.">From {paired.appFor(h)}</span>
       {/if}
@@ -228,6 +240,25 @@
         </a>
       </span>
     {/snippet}
+    {#if podman?.enabled && podman?.problems?.length}
+      <!-- Labelled containers that got no name, and why: a wrong label is
+           fixed on the container, so this says which. -->
+      <div class="card px-5 py-4 flex flex-col gap-2 text-sm">
+        <span class="font-semibold">{podman.problems.length === 1 ? 'A container with a proxy label got no name' : `${podman.problems.length} containers with proxy labels got no name`}</span>
+        <ul class="m-0 pl-5 flex flex-col gap-1">
+          {#each podman.problems as p (p.container)}<li><span class="font-mono">{p.container}</span>: {p.message}</li>{/each}
+        </ul>
+      </div>
+    {/if}
+    {#if podman?.enabled && podman?.elsewhere?.length}
+      <!-- Labelled containers another app already names: nothing wrong. -->
+      <details class="text-sm text-muted">
+        <summary class="cursor-pointer select-none">{podman.elsewhere.length === 1 ? '1 labelled container is also named by another app' : `${podman.elsewhere.length} labelled containers are also named by another app`}</summary>
+        <ul class="m-0 mt-2 pl-5 flex flex-col gap-1">
+          {#each podman.elsewhere as p (p.container)}<li><span class="font-mono">{p.container}</span>: {p.message}</li>{/each}
+        </ul>
+      </details>
+    {/if}
     {#if cards}
       <div class="grid gap-4 grid-cols-[repeat(auto-fill,minmax(min(100%,240px),1fr))]">
         {#each hosts as h (h.id)}
@@ -240,6 +271,7 @@
                 <!-- Breaks at the dot, not inside the app's name. -->
                 <span class="font-semibold text-sm break-words group-hover:underline">{label}<wbr />.{rest.join('.')}</span>
                 <span class="flex items-start gap-2 text-xs {st.ok === false ? 'text-danger' : 'text-muted'}"><span class="mt-0.5 flex">{@render dot(st)}</span><span>{st.text}</span></span>
+                {@render note(h)}
                 {@render history(h)}
               </span>
             </a>
@@ -262,6 +294,7 @@
             <a href="/hosts/{h.id}" use:link class="flex-1 basis-48 min-w-0 flex flex-col gap-0.5 text-fg no-underline hover:underline">
               <span class="font-semibold text-sm break-all">{h.names[0]}</span>
               <span class="text-xs {st.ok === false ? 'text-danger' : 'text-muted'}">{st.text}</span>
+              {@render note(h)}
               {@render history(h)}
             </a>
             <span class="ml-auto shrink-0 flex items-center gap-3 flex-wrap justify-end">
