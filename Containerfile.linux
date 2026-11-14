@@ -29,11 +29,8 @@ RUN v="${CADDY_VERSION:-$(curl -fsSI https://github.com/caddyserver/caddy/releas
 
 FROM alpine:3.24 AS admin-fetch
 ARG RP_VERSION
-# beta while :latest is held at 0.2.0 (dbuild's Linux job passes no variant
-# args and builds the default variant, which is beta for now).
-ARG RP_CHANNEL=beta
 RUN apk add --no-cache curl && \
-    v="${RP_VERSION:-$(if [ "$RP_CHANNEL" = beta ]; then curl -fsS https://github.com/daemonless/reverse-proxy-src/releases.atom | grep -o 'releases/tag/v[^"]*-[^"]*'; else curl -fsSI https://github.com/daemonless/reverse-proxy-src/releases/latest | grep -io 'releases/tag/v[^[:space:]]*'; fi | head -1 | cut -d/ -f3 | sed 's/^v//')}" && \
+    v="${RP_VERSION:-$(curl -fsSI https://github.com/daemonless/reverse-proxy-src/releases/latest | grep -io 'releases/tag/v[^[:space:]]*' | head -1 | cut -d/ -f3 | sed 's/^v//')}" && \
     test -n "$v" && \
     case "$(uname -m)" in x86_64) a=amd64 ;; aarch64) a=arm64 ;; *) echo "no admin build for $(uname -m)" >&2; exit 1 ;; esac && \
     f="reverse-proxy_${v}_linux_${a}.tar.gz" && \

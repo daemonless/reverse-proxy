@@ -44,7 +44,7 @@ Native FreeBSD (amd64 and arm64). Caddy is built from source; the admin and web 
 ## Version Tags
 | Tag | Description | Best For |
 | :--- | :--- | :--- |
-| `latest` | **Beta** -- the newest reverse-proxy-src pre-release. For testing; back up /config first. | Most users — recommended. |
+| `latest` | **daemonless Appliance**. Managed Caddy reverse proxy with a web UI. Caddy built from source; the admin from daemonless/reverse-proxy-src releases. | Most users — recommended. |
 
 ## Prerequisites
 Before deploying, ensure your host environment is ready. See the [Quick Start Guide](https://daemonless.io/guides/quick-start) for host setup instructions.
@@ -219,7 +219,7 @@ volumes:
 ```
 # Makejail
 
-ARG tag=beta
+ARG tag=latest
 
 OPTION container=boot
 OPTION overwrite=force
@@ -292,7 +292,7 @@ volumes:
 ```
 # Makejail
 
-ARG tag=beta
+ARG tag=latest
 
 OPTION container=boot
 OPTION overwrite=force
