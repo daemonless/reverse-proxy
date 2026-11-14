@@ -1,11 +1,11 @@
 {
-  "generated": "2026-11-14T18:49:59Z",
+  "generated": "2026-11-14T18:54:14Z",
   "image": "reverse-proxy",
   "tags": {
     "latest-aarch64": {
       "app_version": "0.3.0",
       "arch": "aarch64",
-      "generated": "2026-11-14T18:48:57Z",
+      "generated": "2026-11-14T18:53:18Z",
       "packages": {
         "dotnet": [],
         "freebsd": [
