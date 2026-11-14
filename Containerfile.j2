@@ -1,7 +1,7 @@
 # reverse-proxy: daemonless appliance, one container on base-rcd. Two units:
 # custom Caddy (DNS modules compiled in) runs as root to bind 80/443; the
-# admin (Go, embedded UI) runs as bsd and drives Caddy over unix sockets in
-# /var/run/reverse-proxy.
+# admin (Go, embedded UI, from daemonless/reverse-proxy-src releases) runs as
+# bsd and drives Caddy over unix sockets in /var/run/reverse-proxy.
 ARG BASE_VERSION=15.1
 ARG FREEBSD_ARCH=amd64
 
@@ -29,38 +29,25 @@ RUN v="${CADDY_VERSION:-$(fetch -v -o /dev/null https://github.com/caddyserver/c
       --output /out/caddy && \
     /out/caddy version
 
-FROM ghcr.io/daemonless/base:${BASE_VERSION} AS ui-amd64
-RUN pkg update && pkg install -y node24 npm-node24 && pkg clean -ay && rm -rf /var/cache/pkg/* /var/db/pkg/repos/*
-COPY admin/ui/package.json admin/ui/package-lock.json /src/ui/
-RUN cd /src/ui && npm ci --no-fund --no-audit
-COPY admin/ui/ /src/ui/
-RUN cd /src/ui && npm run build && /src/ui/source-hash > /src/ui/source.sha256
-
-# The UI's build tools (rolldown, tailwind, lightningcss) have no FreeBSD
-# arm64 binaries, and the UI is the same on every arch: take it from the
-# amd64 image, which CI publishes before the arm64 build starts. The source
-# hash stops an older amd64 image's UI from shipping here.
-FROM ghcr.io/daemonless/base:${BASE_VERSION} AS ui-aarch64
-COPY admin/ui/ /src/ui/
-COPY --from=ghcr.io/daemonless/reverse-proxy:latest-amd64 /usr/local/share/reverse-proxy/ui/ /src/ui/dist/
-COPY --from=ghcr.io/daemonless/reverse-proxy:latest-amd64 /usr/local/share/reverse-proxy/ui-source.sha256 /src/ui/amd64.sha256
-RUN h="$(/src/ui/source-hash)" && \
-    { [ "$h" = "$(cat /src/ui/amd64.sha256)" ] || { echo "latest-amd64 has a different UI than this commit: build amd64 first" >&2; exit 1; }; } && \
-    cp /src/ui/amd64.sha256 /src/ui/source.sha256
-
-FROM ui-${FREEBSD_ARCH} AS ui-build
-
-FROM ghcr.io/daemonless/base:${BASE_VERSION} AS admin-build
-ARG APP_VER=0.3.0
-RUN pkg update && pkg install -y go && pkg clean -ay && rm -rf /var/cache/pkg/* /var/db/pkg/repos/*
-COPY admin/ /src/
-COPY --from=ui-build /src/ui/dist/ /src/ui/dist/
-RUN cd /src && CGO_ENABLED=0 go build -trimpath \
-      -ldflags "-s -w -X main.version=${APP_VER}" \
-      -o /out/reverse-proxy ./cmd/reverse-proxy
+# The admin (Go, UI embedded) is released from daemonless/reverse-proxy-src.
+# Empty: the newest stable release, read from GitHub's releases/latest
+# redirect (no pre-releases; the API rate-limits shared CI runners). Set it
+# to pin one (0.3.0).
+FROM ghcr.io/daemonless/base:${BASE_VERSION} AS admin-fetch
+ARG RP_VERSION=
+RUN v="${RP_VERSION:-$(fetch -v -o /dev/null https://github.com/daemonless/reverse-proxy-src/releases/latest 2>&1 | grep -o 'releases/tag/v[^ ]*' | head -1 | cut -d/ -f3 | sed 's/^v//')}" && \
+    test -n "$v" && \
+    case "$(uname -m)" in amd64) a=amd64 ;; arm64|aarch64) a=arm64 ;; *) echo "no admin build for $(uname -m)" >&2; exit 1 ;; esac && \
+    f="reverse-proxy_${v}_freebsd_${a}.tar.gz" && \
+    u="https://github.com/daemonless/reverse-proxy-src/releases/download/v${v}" && \
+    mkdir -p /out && cd /out && \
+    fetch -q "$u/$f" "$u/SHA256SUMS" && \
+    want="$(grep " $f\$" SHA256SUMS | cut -d' ' -f1)" && \
+    test -n "$want" && test "$want" = "$(sha256 -q "$f")" && \
+    tar -xzf "$f" --strip-components 1 && rm -f "$f" SHA256SUMS && \
+    echo "$v" > /out/version && ./reverse-proxy dns-providers >/dev/null
 
 FROM ghcr.io/daemonless/base-rcd:${BASE_VERSION}
-ARG APP_VER=0.3.0
 ARG FREEBSD_ARCH=amd64
 ARG PACKAGES="ca_root_nss"
 
@@ -76,7 +63,9 @@ LABEL org.opencontainers.image.title="Daemonless Reverse Proxy" \
       io.daemonless.volumes="/config,/data" \
       io.daemonless.healthcheck-url="https://localhost:8443/healthz" \
       io.daemonless.arch="${FREEBSD_ARCH}" \
-      io.daemonless.packages="${PACKAGES}"
+      io.daemonless.packages="${PACKAGES}" \
+      io.daemonless.upstream-url="https://api.github.com/repos/daemonless/reverse-proxy-src/releases/latest" \
+      io.daemonless.upstream-jq=".tag_name | ltrimstr(\"v\")"
 
 RUN pkg update && \
     pkg install -y ${PACKAGES} && \
@@ -84,11 +73,13 @@ RUN pkg update && \
     rm -rf /var/cache/pkg/* /var/db/pkg/repos/*
 
 COPY --from=caddy-build /out/caddy /usr/local/bin/caddy
-COPY --from=admin-build /out/reverse-proxy /usr/local/bin/reverse-proxy
-# Embedded in the binary; kept as files for the arm64 build (above).
-COPY --from=ui-build /src/ui/dist/ /usr/local/share/reverse-proxy/ui/
-COPY --from=ui-build /src/ui/source.sha256 /usr/local/share/reverse-proxy/ui-source.sha256
-RUN mkdir -p /app /config /data && echo "${APP_VER}" > /app/version
+COPY --from=admin-fetch /out/reverse-proxy /usr/local/bin/reverse-proxy
+COPY --from=admin-fetch /out/version /app/version
+# Every DNS provider the UI offers is compiled into Caddy, and the reverse.
+RUN reverse-proxy dns-providers | sort > /tmp/offered && \
+    caddy list-modules | sed -n 's/^dns\.providers\.//p' | sort > /tmp/built && \
+    diff -u /tmp/offered /tmp/built && rm -f /tmp/offered /tmp/built && \
+    mkdir -p /config /data
 
 COPY root/ /
 

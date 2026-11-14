@@ -1,10 +1,10 @@
 # reverse-proxy on Linux, built only by dbuild's shared GitHub workflow
 # (build-linux job): the same Caddy with the same DNS modules, the same
-# admin and UI, on Alpine with s6. Caddy runs as root to bind 80/443; the
-# admin runs as bsd (PUID/PGID), as on FreeBSD. Keep APP_VER with
-# Containerfile.j2's: the manifest adds this image to a tag only when the
-# versions agree.
-ARG APP_VER=0.3.0
+# admin release, on Alpine with s6. Caddy runs as root to bind 80/443; the
+# admin runs as bsd (PUID/PGID), as on FreeBSD. The admin is released from
+# daemonless/reverse-proxy-src; keep RP_VERSION with Containerfile.j2's: the
+# manifest adds this image to a tag only when the versions agree.
+ARG RP_VERSION=
 ARG CADDY_VERSION=
 
 FROM golang:1.26-alpine AS caddy-build
@@ -27,22 +27,21 @@ RUN v="${CADDY_VERSION:-$(curl -fsSI https://github.com/caddyserver/caddy/releas
       --output /out/caddy && \
     /out/caddy version
 
-FROM node:24-alpine AS ui-build
-COPY admin/ui/package.json admin/ui/package-lock.json /src/ui/
-RUN cd /src/ui && npm ci --no-fund --no-audit
-COPY admin/ui/ /src/ui/
-RUN cd /src/ui && npm run build
-
-FROM golang:1.26-alpine AS admin-build
-ARG APP_VER
-COPY admin/ /src/
-COPY --from=ui-build /src/ui/dist/ /src/ui/dist/
-RUN cd /src && CGO_ENABLED=0 go build -trimpath \
-      -ldflags "-s -w -X main.version=${APP_VER}" \
-      -o /out/reverse-proxy ./cmd/reverse-proxy
+FROM alpine:3.24 AS admin-fetch
+ARG RP_VERSION
+RUN apk add --no-cache curl && \
+    v="${RP_VERSION:-$(curl -fsSI https://github.com/daemonless/reverse-proxy-src/releases/latest | grep -io 'releases/tag/v[^[:space:]]*' | head -1 | cut -d/ -f3 | sed 's/^v//')}" && \
+    test -n "$v" && \
+    case "$(uname -m)" in x86_64) a=amd64 ;; aarch64) a=arm64 ;; *) echo "no admin build for $(uname -m)" >&2; exit 1 ;; esac && \
+    f="reverse-proxy_${v}_linux_${a}.tar.gz" && \
+    u="https://github.com/daemonless/reverse-proxy-src/releases/download/v${v}" && \
+    mkdir -p /out && cd /out && \
+    curl -fsSLO "$u/$f" -fsSLO "$u/SHA256SUMS" && \
+    grep " $f\$" SHA256SUMS | sha256sum -c - && \
+    tar -xzf "$f" --strip-components 1 && rm -f "$f" SHA256SUMS && \
+    echo "$v" > /out/version && ./reverse-proxy dns-providers >/dev/null
 
 FROM alpine:3.24
-ARG APP_VER
 LABEL org.opencontainers.image.title="Daemonless Reverse Proxy" \
       org.opencontainers.image.description="Friendly HTTPS names for the services on your network: a managed Caddy reverse proxy with a web UI, secure by default." \
       org.opencontainers.image.source="https://github.com/daemonless/reverse-proxy" \
@@ -55,10 +54,14 @@ LABEL org.opencontainers.image.title="Daemonless Reverse Proxy" \
       io.daemonless.volumes="/config,/data"
 RUN apk add --no-cache s6 ca-certificates tzdata curl && \
     addgroup -g 1000 bsd && adduser -D -H -u 1000 -G bsd -s /sbin/nologin bsd && \
-    mkdir -p /app /config /data && echo "${APP_VER}" > /app/version
+    mkdir -p /app /config /data
 COPY --from=caddy-build /out/caddy /usr/local/bin/caddy
-COPY --from=admin-build /out/reverse-proxy /usr/local/bin/reverse-proxy
-COPY --from=ui-build /src/ui/dist/ /usr/local/share/reverse-proxy/ui/
+COPY --from=admin-fetch /out/reverse-proxy /usr/local/bin/reverse-proxy
+COPY --from=admin-fetch /out/version /app/version
+# Every DNS provider the UI offers is compiled into Caddy, and the reverse.
+RUN reverse-proxy dns-providers | sort > /tmp/offered && \
+    caddy list-modules | sed -n 's/^dns\.providers\.//p' | sort > /tmp/built && \
+    diff -u /tmp/offered /tmp/built && rm -f /tmp/offered /tmp/built
 COPY root/etc/reverse-proxy/bootstrap.json /etc/reverse-proxy/bootstrap.json
 COPY root-linux/ /
 RUN chmod +x /init /healthz /usr/local/bin/s6-ready-when /etc/cont-init.d/* /etc/services.d/*/run

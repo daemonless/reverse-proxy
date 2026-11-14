@@ -32,7 +32,7 @@ address you use today. It is [Caddy](https://caddyserver.com) underneath, manage
 - **Scriptable.** A key per app or script manages names and nothing else; there is an OpenAPI reference and a command line inside the container.
 - **Easy to keep.** One encrypted backup file holds everything; restore it on a fresh install. Delete a name by mistake and Undo brings it back.
 
-Native FreeBSD (amd64 and arm64), built from source. The web UI runs unprivileged; only Caddy is root, to bind ports 80 and 443.
+Native FreeBSD (amd64 and arm64). Caddy is built from source; the admin and web UI come from [daemonless/reverse-proxy-src](https://github.com/daemonless/reverse-proxy-src) releases. The web UI runs unprivileged; only Caddy is root, to bind ports 80 and 443.
 
 | | |
 |---|---|
@@ -44,7 +44,7 @@ Native FreeBSD (amd64 and arm64), built from source. The web UI runs unprivilege
 ## Version Tags
 | Tag | Description | Best For |
 | :--- | :--- | :--- |
-| `latest` | **daemonless Appliance**. Managed Caddy reverse proxy with a web UI, built from source. | Most users — recommended. |
+| `latest` | **daemonless Appliance**. Managed Caddy reverse proxy with a web UI. Caddy built from source; the admin from daemonless/reverse-proxy-src releases. | Most users — recommended. |
 
 ## Prerequisites
 Before deploying, ensure your host environment is ready. See the [Quick Start Guide](https://daemonless.io/guides/quick-start) for host setup instructions.
@@ -436,9 +436,10 @@ The proxy reaches the container on a network they share (the default
 port on the host, and says which on the Names page. The labels own the
 name, port and access, shown read-only; trusted networks, own address,
 the icon and the uptime check are edited in the proxy and survive a
-`podman-compose up`. A stopped container keeps its name and shows as
-down; a removed one loses it, restorably for a day; a recreated one
-(new address, or a new name in its labels) is followed. A label the
+`podman-compose up`. A stopped or removed container (fjord's Stop and
+`compose down` remove it) keeps its name for 7 days and shows as down;
+a recreated one (new address, or a new name in its labels) is followed.
+After 7 days gone the name goes, restorably for a day. A label the
 proxy cannot honor, a name another container or a hand-made name
 already has, or a container it cannot reach is listed on the Names
 page with the reason, never guessed at. Settings → Connected apps shows
