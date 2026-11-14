@@ -1,11 +1,11 @@
 {
-  "generated": "2026-11-14T17:16:10Z",
+  "generated": "2026-11-14T18:41:26Z",
   "image": "reverse-proxy",
   "tags": {
-    "beta-amd64": {
-      "app_version": "0.3.0-beta.1",
+    "latest-amd64": {
+      "app_version": "0.3.0",
       "arch": "amd64",
-      "generated": "2026-11-14T17:15:42Z",
+      "generated": "2026-11-14T18:40:45Z",
       "packages": {
         "dotnet": [],
         "freebsd": [
@@ -548,7 +548,7 @@
           {
             "name": "github.com/daemonless/reverse-proxy-src",
             "purl": "",
-            "version": "v0.3.0-beta.1"
+            "version": "v0.3.0"
           },
           {
             "name": "github.com/dlclark/regexp2/v2",
