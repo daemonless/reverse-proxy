@@ -41,7 +41,11 @@ RUN v="${CADDY_VERSION:-$(fetch -v -o /dev/null https://github.com/caddyserver/c
 # to pin one (0.3.0).
 FROM ghcr.io/daemonless/base:${BASE_VERSION} AS admin-fetch
 ARG RP_VERSION=
-RUN v="${RP_VERSION:-$(fetch -v -o /dev/null https://github.com/daemonless/reverse-proxy-src/releases/latest 2>&1 | grep -o 'releases/tag/v[^ ]*' | head -1 | cut -d/ -f3 | sed 's/^v//')}" && \
+# latest: the newest stable release. beta: the newest pre-release (a tag
+# with a hyphen, v0.3.0-beta.1), never a stable one; the releases feed lists
+# newest first.
+ARG RP_CHANNEL=latest
+RUN v="${RP_VERSION:-$(if [ "$RP_CHANNEL" = beta ]; then fetch -qo - https://github.com/daemonless/reverse-proxy-src/releases.atom | grep -o 'releases/tag/v[^"]*-[^"]*'; else fetch -v -o /dev/null https://github.com/daemonless/reverse-proxy-src/releases/latest 2>&1 | grep -o 'releases/tag/v[^ ]*'; fi | head -1 | cut -d/ -f3 | sed 's/^v//')}" && \
     test -n "$v" && \
     case "$(uname -m)" in amd64) a=amd64 ;; arm64|aarch64) a=arm64 ;; *) echo "no admin build for $(uname -m)" >&2; exit 1 ;; esac && \
     f="reverse-proxy_${v}_freebsd_${a}.tar.gz" && \
@@ -55,6 +59,8 @@ RUN v="${RP_VERSION:-$(fetch -v -o /dev/null https://github.com/daemonless/rever
 
 FROM ghcr.io/daemonless/base-rcd:${BASE_VERSION}
 ARG FREEBSD_ARCH=amd64
+ARG UPSTREAM_URL="https://api.github.com/repos/daemonless/reverse-proxy-src/releases/latest"
+ARG UPSTREAM_JQ='.tag_name | ltrimstr("v")'
 ARG PACKAGES="ca_root_nss"
 
 LABEL org.opencontainers.image.title="Daemonless Reverse Proxy" \
@@ -70,8 +76,8 @@ LABEL org.opencontainers.image.title="Daemonless Reverse Proxy" \
       io.daemonless.healthcheck-url="https://localhost:8443/healthz" \
       io.daemonless.arch="${FREEBSD_ARCH}" \
       io.daemonless.packages="${PACKAGES}" \
-      io.daemonless.upstream-url="https://api.github.com/repos/daemonless/reverse-proxy-src/releases/latest" \
-      io.daemonless.upstream-jq=".tag_name | ltrimstr(\"v\")"
+      io.daemonless.upstream-url="${UPSTREAM_URL}" \
+      io.daemonless.upstream-jq="${UPSTREAM_JQ}"
 
 RUN pkg update && \
     pkg install -y ${PACKAGES} && \

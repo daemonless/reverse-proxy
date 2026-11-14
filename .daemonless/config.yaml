@@ -6,10 +6,16 @@ build:
     - amd64
     - aarch64
   variants:
-    - tag: latest
+    # :latest is held at 0.2.0 by hand until 0.3.0 is called stable; then
+    # put the latest variant back (default) above beta.
+    - tag: beta
       containerfile: Containerfile
       default: true
-      tag_desc: "**daemonless Appliance**. Managed Caddy reverse proxy with a web UI. Caddy built from source; the admin from daemonless/reverse-proxy-src releases."
+      args:
+        RP_CHANNEL: beta
+        UPSTREAM_URL: "https://api.github.com/repos/daemonless/reverse-proxy-src/releases"
+        UPSTREAM_JQ: '[.[] | select(.prerelease)][0].tag_name | ltrimstr("v")'
+      tag_desc: "**Beta** -- the newest reverse-proxy-src pre-release. For testing; back up /config first."
 
 cit:
   mode: health
