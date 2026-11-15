@@ -1,11 +1,11 @@
 {
-  "generated": "2026-11-14T18:41:26Z",
+  "generated": "2026-11-15T10:14:03Z",
   "image": "reverse-proxy",
   "tags": {
     "latest-amd64": {
       "app_version": "0.3.0",
       "arch": "amd64",
-      "generated": "2026-11-14T18:40:45Z",
+      "generated": "2026-11-15T10:13:21Z",
       "packages": {
         "dotnet": [],
         "freebsd": [
@@ -266,7 +266,7 @@
               "BSD2CLAUSE"
             ],
             "name": "pkg",
-            "version": "2.8.4"
+            "version": "2.9.2"
           }
         ],
         "go": [
@@ -1208,7 +1208,7 @@
           {
             "name": "stdlib",
             "purl": "",
-            "version": "v1.26.10"
+            "version": "v1.26.11"
           }
         ],
         "java": [],
