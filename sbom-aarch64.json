@@ -1,11 +1,11 @@
 {
-  "generated": "2026-11-15T13:30:23Z",
+  "generated": "2026-11-24T10:32:57Z",
   "image": "reverse-proxy",
   "tags": {
     "latest-aarch64": {
       "app_version": "0.3.0",
       "arch": "aarch64",
-      "generated": "2026-11-15T13:29:26Z",
+      "generated": "2026-11-24T10:31:56Z",
       "packages": {
         "dotnet": [],
         "freebsd": [
@@ -77,7 +77,7 @@
               "BSD2CLAUSE"
             ],
             "name": "FreeBSD-libarchive",
-            "version": "15.1"
+            "version": "15.1p7"
           },
           {
             "licenses": [
@@ -105,7 +105,7 @@
               "BSD2CLAUSE"
             ],
             "name": "FreeBSD-libldns",
-            "version": "15.1"
+            "version": "15.1p7"
           },
           {
             "licenses": [
@@ -147,14 +147,14 @@
               "BSD2CLAUSE"
             ],
             "name": "FreeBSD-openssl",
-            "version": "15.1"
+            "version": "15.1p7"
           },
           {
             "licenses": [
               "BSD2CLAUSE"
             ],
             "name": "FreeBSD-openssl-lib",
-            "version": "15.1p4"
+            "version": "15.1p7"
           },
           {
             "licenses": [
@@ -168,7 +168,7 @@
               "BSD2CLAUSE"
             ],
             "name": "FreeBSD-pkg-bootstrap",
-            "version": "15.1"
+            "version": "15.1p7"
           },
           {
             "licenses": [
@@ -182,7 +182,7 @@
               "BSD2CLAUSE"
             ],
             "name": "FreeBSD-runtime",
-            "version": "15.1p6"
+            "version": "15.1p7"
           },
           {
             "licenses": [
@@ -217,7 +217,7 @@
               "CDDL-1.0"
             ],
             "name": "FreeBSD-zfs-lib",
-            "version": "15.1p1"
+            "version": "15.1p7"
           },
           {
             "licenses": [
@@ -231,7 +231,7 @@
               "PD"
             ],
             "name": "FreeBSD-zoneinfo",
-            "version": "15.1p5"
+            "version": "15.1p7"
           },
           {
             "licenses": [
@@ -266,7 +266,7 @@
               "BSD2CLAUSE"
             ],
             "name": "pkg",
-            "version": "2.8.4"
+            "version": "2.9.2"
           }
         ],
         "go": [
@@ -1208,7 +1208,7 @@
           {
             "name": "stdlib",
             "purl": "",
-            "version": "v1.26.10"
+            "version": "v1.26.11"
           }
         ],
         "java": [],
